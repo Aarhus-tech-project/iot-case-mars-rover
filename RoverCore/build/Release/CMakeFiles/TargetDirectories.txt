@@ -1,0 +1,3 @@
+/home/markus/Desktop/iot-case-mars-rover/RoverCore/build/Release/CMakeFiles/rover_core.dir
+/home/markus/Desktop/iot-case-mars-rover/RoverCore/build/Release/CMakeFiles/edit_cache.dir
+/home/markus/Desktop/iot-case-mars-rover/RoverCore/build/Release/CMakeFiles/rebuild_cache.dir

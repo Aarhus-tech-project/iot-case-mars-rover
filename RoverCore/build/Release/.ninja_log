@@ -1,0 +1,4 @@
+# ninja log v7
+1	3	1755854503370883385	/home/markus/Desktop/iot-case-mars-rover/RoverCore/build/Release/CMakeFiles/cmake.verify_globs	a4eed31de6452640
+3	129	1755854503372835686	CMakeFiles/rover_core.dir/src/main.cpp.o	c8641e35cc6cc49
+129	153	1755854503498997151	bin/rover_core	4b84efc0d0948055
