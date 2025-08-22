@@ -4,7 +4,7 @@
 
 int main() {
     std::cout << "Rover Core" << std::endl;
-    std::cout << VARIABLE << std::endl;
+    std::cout << TEST_DEFINE << std::endl;
 
     return 0;
 }

@@ -1,8 +1,0 @@
-[
-{
-  "directory": "/home/markus/Desktop/iot-case-mars-rover/RoverCore/build/Release",
-  "command": "/usr/bin/c++ -I/home/markus/Desktop/iot-case-mars-rover/RoverCore/include -O3 -DNDEBUG -std=gnu++17 -fPIE -Wall -Wextra -Wpedantic -Wconversion -Wno-unused-parameter -O2 -pipe -march=native -o CMakeFiles/rover_core.dir/src/main.cpp.o -c /home/markus/Desktop/iot-case-mars-rover/RoverCore/src/main.cpp",
-  "file": "/home/markus/Desktop/iot-case-mars-rover/RoverCore/src/main.cpp",
-  "output": "CMakeFiles/rover_core.dir/src/main.cpp.o"
-}
-]

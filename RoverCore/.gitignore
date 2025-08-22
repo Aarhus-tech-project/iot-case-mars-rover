@@ -1,0 +1,47 @@
+# OS-specific junk
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Editor junk
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build output
+build/
+dist/
+out/
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env/
+venv/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Misc
+*.bak
+*.tmp
+*.lock

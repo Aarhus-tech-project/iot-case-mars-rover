@@ -1,3 +1,3 @@
 #pragma once
 
-#define VARIABLE 10
+#define TEST_DEFINE 10
