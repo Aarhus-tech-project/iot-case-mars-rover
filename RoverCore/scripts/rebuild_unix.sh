@@ -11,34 +11,25 @@ echo "[*] Tooling:"
 cmake --version || true
 cmd gcc  && gcc  --version | head -n1 || echo "gcc: MISSING"
 cmd g++  && g++  --version | head -n1 || echo "g++: MISSING"
-cmd ninja && ninja --version || echo "ninja: (not found, will fallback)"
+cmd make && make --version | head -n1 || echo "make: MISSING"
 
-# --- Choose generator ---
-GEN="Unix Makefiles"
-if cmd ninja; then GEN="Ninja"; fi
-echo "[*] Generator: ${GEN}"
-
-# --- Clean build cache completely (avoid stale CMAKE_MAKE_PROGRAM) ---
+# --- Clean build cache completely ---
 echo "[*] Nuking ${ROOT_DIR}/build"
 rm -rf "${ROOT_DIR}/build"
 mkdir -p "${BUILD_DIR}"
 
-# --- Configure ---
+# --- Configure (force Unix Makefiles) ---
 echo "[*] Configuring (${BUILD_TYPE})"
 cmake -S "${ROOT_DIR}" -B "${BUILD_DIR}" \
-  -G "${GEN}" \
+  -G "Unix Makefiles" \
   -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
   -DCMAKE_C_COMPILER=/usr/bin/gcc \
   -DCMAKE_CXX_COMPILER=/usr/bin/g++
 
 # --- Build ---
-JOBS="$(nproc || echo 2)"
+JOBS="$(nproc 2>/dev/null || echo 2)"
 echo "[*] Building (-j${JOBS})"
-if [ "${GEN}" = "Ninja" ]; then
-  cmake --build "${BUILD_DIR}" -j"${JOBS}" --verbose
-else
-  cmake --build "${BUILD_DIR}" -- -j"${JOBS}" VERBOSE=1
-fi
+cmake --build "${BUILD_DIR}" -- -j"${JOBS}" VERBOSE=1
 
 # --- Done ---
 BIN="${BUILD_DIR}/bin/rover_core"
