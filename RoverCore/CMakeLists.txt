@@ -12,20 +12,23 @@ endif()
 # =========================================================
 # Protobuf / gRPC
 # =========================================================
-if(APPLE)
-  # Homebrew provides CONFIG packages
-  find_package(Protobuf CONFIG REQUIRED)   # protobuf::libprotobuf, protobuf::protoc
-  find_package(gRPC     CONFIG REQUIRED)   # gRPC::grpc++, gRPC::grpc_cpp_plugin
-  set(PROTOBUF_LIB protobuf::libprotobuf)
-  set(PROTOC_EXE   protobuf::protoc)
-else()
-  # Try CONFIG first, then legacy + pkg-config fallback
-  find_package(Protobuf CONFIG QUIET)
-  if(Protobuf_FOUND AND TARGET protobuf::libprotobuf)
+
+# ---- Protobuf (normalize targets across platforms) ----
+# Try CONFIG first (Homebrew/modern); fall back to legacy FindProtobuf and
+# synthesize an imported target if needed.
+find_package(Protobuf CONFIG QUIET)
+
+set(PROTOBUF_LIB "")
+set(PROTOC_EXE "")
+
+if(Protobuf_FOUND)
+  if(TARGET protobuf::libprotobuf)
     set(PROTOBUF_LIB protobuf::libprotobuf)
     set(PROTOC_EXE   protobuf::protoc)
-  else()
-    find_package(Protobuf REQUIRED)  # legacy FindProtobuf.cmake
+  elseif(TARGET Protobuf::libprotobuf)
+    set(PROTOBUF_LIB Protobuf::libprotobuf)
+    set(PROTOC_EXE   Protobuf::protoc)
+  elseif(TARGET Protobuf::Protobuf)
     set(PROTOBUF_LIB Protobuf::Protobuf)
     if(DEFINED Protobuf_PROTOC_EXECUTABLE)
       set(PROTOC_EXE ${Protobuf_PROTOC_EXECUTABLE})
@@ -33,7 +36,37 @@ else()
       find_program(PROTOC_EXE protoc REQUIRED)
     endif()
   endif()
+endif()
 
+if(NOT PROTOBUF_LIB)
+  # Legacy module
+  find_package(Protobuf REQUIRED)  # populates Protobuf_LIBRARIES/INCLUDE_DIRS and maybe targets
+  if(TARGET Protobuf::Protobuf)
+    set(PROTOBUF_LIB Protobuf::Protobuf)
+  else()
+    # Create an imported interface target so we can link consistently
+    add_library(Protobuf::Protobuf INTERFACE IMPORTED)
+    set_target_properties(Protobuf::Protobuf PROPERTIES
+      INTERFACE_LINK_LIBRARIES      "${Protobuf_LIBRARIES}"
+      INTERFACE_INCLUDE_DIRECTORIES "${Protobuf_INCLUDE_DIRS}")
+    set(PROTOBUF_LIB Protobuf::Protobuf)
+  endif()
+
+  if(DEFINED Protobuf_PROTOC_EXECUTABLE)
+    set(PROTOC_EXE ${Protobuf_PROTOC_EXECUTABLE})
+  else()
+    find_program(PROTOC_EXE protoc REQUIRED)
+  endif()
+endif()
+
+message(STATUS "Using Protobuf target: ${PROTOBUF_LIB}")
+message(STATUS "Using protoc: ${PROTOC_EXE}")
+
+# ---- gRPC ----
+# On macOS/Homebrew there’s a CONFIG package; otherwise fall back to pkg-config.
+if(APPLE)
+  find_package(gRPC CONFIG REQUIRED)   # gRPC::grpc++, gRPC::grpc_cpp_plugin
+else()
   find_package(gRPC CONFIG QUIET)
   if(NOT gRPC_FOUND)
     find_package(PkgConfig REQUIRED)
@@ -57,36 +90,36 @@ set(PROTO_DIR "${PROTO_DIR}" CACHE PATH "Path to shared .proto files (default: .
 if(NOT PROTO_DIR)
   set(PROTO_DIR "${CMAKE_CURRENT_LIST_DIR}/../proto")
 endif()
-if(NOT EXISTS ${PROTO_DIR})
+if(NOT EXISTS "${PROTO_DIR}")
   message(FATAL_ERROR "PROTO_DIR not found: ${PROTO_DIR}\nPass -DPROTO_DIR=/absolute/path/to/proto")
 endif()
 
 # Collect .proto files
-file(GLOB PROTO_FILES_ABS CONFIGURE_DEPENDS ${PROTO_DIR}/*.proto)
+file(GLOB PROTO_FILES_ABS CONFIGURE_DEPENDS "${PROTO_DIR}/*.proto")
 if(NOT PROTO_FILES_ABS)
   message(FATAL_ERROR "No .proto files in ${PROTO_DIR}")
 endif()
 
 # Where generated C++ lands
-set(GEN_DIR ${CMAKE_BINARY_DIR}/generated)
-file(MAKE_DIRECTORY ${GEN_DIR})
+set(GEN_DIR "${CMAKE_BINARY_DIR}/generated")
+file(MAKE_DIRECTORY "${GEN_DIR}")
 
 # Build relative list for protoc (run from PROTO_DIR)
 set(GENERATED_SRCS "")
 set(GENERATED_HDRS "")
 set(PROTO_FILES_REL "")
 foreach(PABS ${PROTO_FILES_ABS})
-  get_filename_component(BASE ${PABS} NAME_WE)  # rover
-  get_filename_component(REL  ${PABS} NAME)     # rover.proto
-  list(APPEND PROTO_FILES_REL ${REL})
-  list(APPEND GENERATED_SRCS ${GEN_DIR}/${BASE}.pb.cc ${GEN_DIR}/${BASE}.grpc.pb.cc)
-  list(APPEND GENERATED_HDRS ${GEN_DIR}/${BASE}.pb.h  ${GEN_DIR}/${BASE}.grpc.pb.h)
+  get_filename_component(BASE "${PABS}" NAME_WE)  # rover
+  get_filename_component(REL  "${PABS}" NAME)     # rover.proto
+  list(APPEND PROTO_FILES_REL "${REL}")
+  list(APPEND GENERATED_SRCS "${GEN_DIR}/${BASE}.pb.cc" "${GEN_DIR}/${BASE}.grpc.pb.cc")
+  list(APPEND GENERATED_HDRS "${GEN_DIR}/${BASE}.pb.h"  "${GEN_DIR}/${BASE}.grpc.pb.h")
 endforeach()
 
 # IMPORTANT: no quotes around args in COMMAND
 add_custom_command(
   OUTPUT ${GENERATED_SRCS} ${GENERATED_HDRS}
-  WORKING_DIRECTORY ${PROTO_DIR}
+  WORKING_DIRECTORY "${PROTO_DIR}"
   COMMAND ${PROTOC_EXE}
     --proto_path=${PROTO_DIR}
     --cpp_out=${GEN_DIR}
@@ -99,7 +132,7 @@ add_custom_command(
 )
 
 add_library(api_protos ${GENERATED_SRCS})
-target_include_directories(api_protos PUBLIC ${GEN_DIR})
+target_include_directories(api_protos PUBLIC "${GEN_DIR}")
 target_link_libraries(api_protos PUBLIC ${PROTOBUF_LIB} gRPC::grpc++)
 
 # =========================================================
@@ -129,7 +162,7 @@ if(WIN32)
   endif()
   target_link_libraries(rover_core PRIVATE ws2_32)
 elseif(APPLE OR UNIX)
-  target_compile_options(rover_core PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(rover_core PRIVATE -Wall -Wextra -WPedantic)
   if(CMAKE_BUILD_TYPE MATCHES "Release")
     target_compile_options(rover_core PRIVATE -O2 -pipe)
   endif()
