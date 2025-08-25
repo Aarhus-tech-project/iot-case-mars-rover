@@ -14,11 +14,7 @@ public sealed class TelemetryService : Telemetry.TelemetryBase
 
         await foreach (var s in requestStream.ReadAllAsync(context.CancellationToken))
         {
-            count++;
-            if ((count % 1000UL) == 0)
-            {
-                Console.WriteLine($"[{count,8}] angle={s.AngleCdeg/100.0:F2}°  dist={s.DistanceMm}mm  I={s.Intensity}");
-            }
+            Console.WriteLine($"angle={s.AngleCdeg/100.0:F2}°  dist={s.DistanceMm}mm  I={s.Intensity}");
         }
 
         sw.Stop();
