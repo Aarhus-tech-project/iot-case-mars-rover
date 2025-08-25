@@ -1,0 +1,87 @@
+# --- OS junk
+.DS_Store
+Thumbs.db
+
+# --- IDEs
+.vs/
+.vscode/
+.idea/
+*.sln.iml
+*.user
+*.userosscache
+*.suo
+*.userprefs
+*.sln.docstates
+_ReSharper*/
+*.DotSettings.user
+
+# --- Build / output
+[Bb]in/
+[Oo]bj/
+out/
+artifacts/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+Debug*/
+Release*/
+
+# --- NuGet
+packages/
+*.nupkg
+*.snupkg
+# (keep packages.config / packages.lock.json)
+
+# --- ASP.NET / IIS Express
+App_Data/
+iisexpress/
+*.dbmdl
+
+# --- Logs / coverage / test results
+logs/
+*.log
+TestResult*/
+TestResults*/
+*.trx
+*.coverage
+*.coveragexml
+coverage/
+coverage*.xml
+
+# --- Frontend (SPA/static assets)
+node_modules/
+bower_components/
+wwwroot/lib/
+dist/
+build/
+
+# --- Secrets / certs / publish
+.env
+.env.*.local
+secrets.json
+local.settings.json
+*.pfx
+*.p12
+*.key
+*.cer
+*.pem
+*.Publish.xml
+*.pubxml
+*.pubxml.user
+PublishScripts/
+
+# --- Local DBs
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.mdf
+*.ldf
+
+# --- Misc temp
+*.tmp
+*.temp
+*.bak
+*.cache/
