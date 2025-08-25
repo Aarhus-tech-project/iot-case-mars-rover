@@ -1,22 +1,46 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: ./scripts/rebuild_unix.sh [Release|Debug]
 BUILD_TYPE="${1:-Release}"
-BUILD_DIR="build/${BUILD_TYPE}"
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+BUILD_DIR="${ROOT_DIR}/build/${BUILD_TYPE}"
 
-# Optional: quick helpers to install deps
-# macOS:   brew install cmake ninja
-# Debian/RPi: sudo apt update && sudo apt install -y build-essential cmake ninja-build
+# --- Tool check ---
+cmd() { command -v "$1" >/dev/null 2>&1; }
+echo "[*] Tooling:"
+cmake --version || true
+cmd gcc  && gcc  --version | head -n1 || echo "gcc: MISSING"
+cmd g++  && g++  --version | head -n1 || echo "g++: MISSING"
+cmd ninja && ninja --version || echo "ninja: (not found, will fallback)"
 
-echo "[*] Nuking ${BUILD_DIR}"
-rm -rf "${BUILD_DIR}"
+# --- Choose generator ---
+GEN="Unix Makefiles"
+if cmd ninja; then GEN="Ninja"; fi
+echo "[*] Generator: ${GEN}"
 
+# --- Clean build cache completely (avoid stale CMAKE_MAKE_PROGRAM) ---
+echo "[*] Nuking ${ROOT_DIR}/build"
+rm -rf "${ROOT_DIR}/build"
+mkdir -p "${BUILD_DIR}"
+
+# --- Configure ---
 echo "[*] Configuring (${BUILD_TYPE})"
-cmake -S . -B "${BUILD_DIR}" -G Ninja -DCMAKE_BUILD_TYPE="${BUILD_TYPE}"
+cmake -S "${ROOT_DIR}" -B "${BUILD_DIR}" \
+  -G "${GEN}" \
+  -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
+  -DCMAKE_C_COMPILER=/usr/bin/gcc \
+  -DCMAKE_CXX_COMPILER=/usr/bin/g++
 
-echo "[*] Building"
-cmake --build "${BUILD_DIR}" -- -v
+# --- Build ---
+JOBS="$(nproc || echo 2)"
+echo "[*] Building (-j${JOBS})"
+if [ "${GEN}" = "Ninja" ]; then
+  cmake --build "${BUILD_DIR}" -j"${JOBS}" --verbose
+else
+  cmake --build "${BUILD_DIR}" -- -j"${JOBS}" VERBOSE=1
+fi
 
-echo "[*] Binary:"
-echo "    ${BUILD_DIR}/bin/rover_core"
+# --- Done ---
+BIN="${BUILD_DIR}/bin/rover_core"
+echo "[*] Binary: ${BIN}"
+[ -x "${BIN}" ] && ls -lh "${BIN}" || true
