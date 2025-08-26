@@ -9,9 +9,9 @@
 #include "LidarReader.h"
 #include "OccupancyGrid.h"
 
-#define GRID_WIDTH 128
-#define GRID_HEIGHT 128
-#define GRID_CELL_SIZE_M 0.20f
+#define GRID_WIDTH 32
+#define GRID_HEIGHT 32
+#define GRID_CELL_SIZE_M 0.80f
 
 static std::atomic<bool> g_run{true};
 static void on_sigint(int){ g_run.store(false); }
