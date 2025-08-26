@@ -171,5 +171,5 @@ endif()
 
 # Strip in Release (non-Windows)
 if(CMAKE_BUILD_TYPE MATCHES "Release" AND NOT WIN32)
-  target_link_options(rover_core PRIVATE -s)
+  target_link_options(rover_core PRIVATE)
 endif()
