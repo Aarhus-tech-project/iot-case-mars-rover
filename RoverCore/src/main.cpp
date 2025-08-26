@@ -9,9 +9,9 @@
 #include "LidarReader.h"
 #include "OccupancyGrid.h"
 
-#define GRID_WIDTH 32
-#define GRID_HEIGHT 32
-#define GRID_CELL_SIZE_M 0.10f
+#define GRID_WIDTH 1024
+#define GRID_HEIGHT 1024
+#define GRID_CELL_SIZE_M 0.05f
 
 static std::atomic<bool> g_run{true};
 static void on_sigint(int){ g_run.store(false); }
@@ -45,6 +45,23 @@ void render_ascii(const OccupancyGrid<GRID_WIDTH, GRID_HEIGHT>& grid, int rover_
     std::puts("+");
 
     std::fflush(stdout);
+}
+
+// map 0..255 to grayscale and write PGM
+template <size_t W, size_t H>
+bool save_grid_pgm(const OccupancyGrid<W,H>& grid, const char* path) {
+    std::ofstream f(path, std::ios::binary);
+    if (!f) return false;
+    // P5 = binary graymap, W H, maxval 255
+    f << "P5\n" << W << " " << H << "\n255\n";
+    // top row first? If you want (0,0) bottom-left, reverse y here.
+    for (size_t y = 0; y < H; ++y) {
+        for (size_t x = 0; x < W; ++x) {
+            uint8_t v = grid.at(x, y);
+            f.put(static_cast<char>(v));
+        }
+    }
+    return f.good();
 }
 
 struct Point {
@@ -98,13 +115,19 @@ int main(){
           // rover grid coords (center)
           int rover_gx, rover_gy;
           std::tie(rover_gx, rover_gy) = grid.worldToGrid(rover_x_m, rover_y_m);
-          render_ascii(grid, rover_gx, rover_gy);
+          //render_ascii(grid, rover_gx, rover_gy);
           last_draw = now;
       }
   }
 
   // on exit, show cursor again
   std::fputs("\x1b[?25h\n", stdout);
+
+  if (!save_grid_pgm(grid, "/tmp/occgrid.pgm")) {
+      std::fprintf(stderr, "[grid] failed to write /tmp/occgrid.pgm\n");
+  } else {
+      std::fprintf(stderr, "[grid] wrote /tmp/occgrid.pgm\n");
+  }
 
   lr.close();
   return 0;
