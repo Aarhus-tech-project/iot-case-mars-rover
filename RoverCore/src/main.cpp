@@ -105,7 +105,23 @@ int main(){
 
       Point samplePoint = sample_from_origin({rover_x_m, rover_y_m}, angle_cdeg / 100.0f, dist_mm);
       auto [gx, gy] = grid.worldToGrid(samplePoint.x, samplePoint.y);
-      if (grid.inBounds(gx, gy)) grid.at(gx, gy) = 255;
+      if (grid.inBounds(gx, gy)) grid.at(gx, gy) += 8;
+
+      // line from rover to sample, decrement cells by 1
+      auto [rgx, rgy] = grid.worldToGrid(rover_x_m, rover_y_m);
+      int dx = std::abs(gx - rgx), sx = rgx < gx ? 1 : -1;
+      int dy = -std::abs(gy - rgy), sy = rgy < gy ? 1 : -1;
+      int err = dx + dy, e2;
+      while (true) {
+          if (grid.inBounds(rgx, rgy)) {
+              uint8_t& v = grid.at(rgx, rgy);
+              if (v > 0) v -= 2;
+          }
+          if (rgx == gx && rgy == gy) break;
+          e2 = 2 * err;
+          if (e2 >= dy) { err += dy; rgx += sx; }
+          if (e2 <= dx) { err += dx; rgy += sy; }
+      }
   };
 
   while (g_run.load()){
