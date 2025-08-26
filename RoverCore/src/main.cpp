@@ -5,6 +5,7 @@
 #include <csignal>
 #include <thread>
 #include <cmath>
+#include <fstream>
 
 #include "LidarReader.h"
 #include "OccupancyGrid.h"
