@@ -5,22 +5,24 @@ namespace HubServer.Services;
 
 public sealed class TelemetryService : Telemetry.TelemetryBase
 {
-    public override async Task<Ack> PublishSamples(
-        IAsyncStreamReader<Sample> requestStream,
-        ServerCallContext context)
+    public override async Task<Ack> PublishGrid(IAsyncStreamReader<GridFrame> requestStream, ServerCallContext context)
     {
-        ulong count = 0;
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-
-        await foreach (var s in requestStream.ReadAllAsync(context.CancellationToken))
+        ulong n = 0;
+        await foreach (var m in requestStream.ReadAllAsync())
         {
-            Console.WriteLine($"angle={s.AngleCdeg/100.0:F2}°  dist={s.DistanceMm}mm  I={s.Intensity}");
+            int w = (int)m.Width, h = (int)m.Height;
+            var bytes = m.Data.ToByteArray(); // length should be w*h
+            // Example: copy into 2D byte[,] grid if you want
+            var grid = new byte[h, w];
+            for (int y = 0; y < h; y++)
+            {
+                Buffer.BlockCopy(bytes, y * w, grid, y * w, w);
+            }
+
+            // TODO: store/display; m.CellSizeM gives resolution
+            n++;
         }
 
-        sw.Stop();
-        var secs = Math.Max(1e-6, sw.Elapsed.TotalSeconds);
-        Console.WriteLine($"[hub] stream closed: {count} samples in {secs:F2}s  (~{count/secs:F0}/s)");
-
-        return new Ack { Received = count };
+        return new Ack { Received = n };
     }
 }

@@ -1,0 +1,16 @@
+syntax = "proto3";
+package rover.v1;
+
+message GridFrame {
+  uint32 width       = 1;  // pixels (cells) in X
+  uint32 height      = 2;  // pixels (cells) in Y
+  float  cell_size_m = 3;  // meters per cell
+  bytes  data        = 4;  // WIDTH*HEIGHT bytes, row-major (y=0..height-1, x=0..width-1)
+}
+
+message Ack { uint64 received = 1; }
+
+service Telemetry {
+  // Stream full grids every N seconds, or just call once if you prefer.
+  rpc PublishGrid (stream GridFrame) returns (Ack);
+}

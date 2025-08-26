@@ -25,20 +25,16 @@ using rover::v1::Telemetry;
 using rover::v1::Sample;
 using rover::v1::Ack;
 
+#define HUB_ADDR "127.0.0.1:50051"
+
 static std::atomic<bool> g_run{true};
 static std::string env_str(const char* k, const char* d){ const char* v=getenv(k); return v? v : d; }
-static std::string HUB_ADDR = env_str("HUB_ADDR", "127.0.0.1:50051");
-
-static inline uint64_t mono_ns(){
-  using namespace std::chrono;
-  return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
-}
 
 static void on_sigint(int){ g_run.store(false); }
 
 int main(){
   std::signal(SIGINT, on_sigint);
-  fprintf(stderr, "[rover] hub=%s\n", HUB_ADDR.c_str());
+  fprintf(stderr, "[rover] hub=%s\n", HUB_ADDR);
 
   // --- create channel (h2c, no TLS) ---
   auto channel = grpc::CreateChannel(HUB_ADDR, grpc::InsecureChannelCredentials());
@@ -58,7 +54,6 @@ int main(){
   s.set_angle_cdeg(69420);   // 123.45°
   s.set_distance_mm(1000);   // 1.0 m
   s.set_intensity(42);       // arbitrary
-  s.set_mono_ns(mono_ns());  // client monotonic timestamp
 
   if(!writer->Write(s)){
     fprintf(stderr, "[rover] write failed (stream closed by server)\n");

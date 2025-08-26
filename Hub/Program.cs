@@ -1,3 +1,4 @@
+using Grpc.Net.Compression;
 using HubServer.Services;
 
 var builder = WebApplication.CreateBuilder(args);
