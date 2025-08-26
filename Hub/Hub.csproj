@@ -15,6 +15,7 @@
     <PackageReference Include="Grpc.AspNetCore.Server.Reflection" Version="2.71.0" />
     <PackageReference Include="Grpc.Tools" Version="2.61.0" PrivateAssets="All" />
     <PackageReference Include="Google.Protobuf" Version="3.30.2" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
   </ItemGroup>
 
 </Project>

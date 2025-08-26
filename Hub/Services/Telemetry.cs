@@ -5,24 +5,18 @@ namespace HubServer.Services;
 
 public sealed class TelemetryService : Telemetry.TelemetryBase
 {
+    private readonly GridState _state;
+    public TelemetryService(GridState state) => _state = state;
+
     public override async Task<Ack> PublishGrid(IAsyncStreamReader<GridFrame> requestStream, ServerCallContext context)
     {
         ulong n = 0;
-        await foreach (var m in requestStream.ReadAllAsync())
+        await foreach (var m in requestStream.ReadAllAsync(context.CancellationToken))
         {
-            int w = (int)m.Width, h = (int)m.Height;
-            var bytes = m.Data.ToByteArray(); // length should be w*h
-            // Example: copy into 2D byte[,] grid if you want
-            var grid = new byte[h, w];
-            for (int y = 0; y < h; y++)
-            {
-                Buffer.BlockCopy(bytes, y * w, grid, y * w, w);
-            }
-
-            // TODO: store/display; m.CellSizeM gives resolution
+            var bytes = m.Data.ToByteArray(); // should be width*height
+            _state.Update((int)m.Width, (int)m.Height, m.CellSizeM, bytes);
             n++;
         }
-
         return new Ack { Received = n };
     }
 }
