@@ -1,0 +1,79 @@
+// main.cpp — Rover client: minimal test sender over gRPC PublishSamples
+// ENV:
+//   HUB_ADDR (default "127.0.0.1:50051")
+// Build: link with gRPC::grpc++, api_protos, Threads
+
+#include <grpcpp/grpcpp.h>
+#include <grpcpp/security/credentials.h>
+#include <grpcpp/create_channel.h>
+#include "rover.grpc.pb.h"
+
+#include <atomic>
+#include <chrono>
+#include <csignal>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <memory>
+#include <string>
+#include <thread>
+
+using grpc::Channel;
+using grpc::ClientContext;
+using grpc::Status;
+using rover::v1::Telemetry;
+using rover::v1::Sample;
+using rover::v1::Ack;
+
+static std::atomic<bool> g_run{true};
+static std::string env_str(const char* k, const char* d){ const char* v=getenv(k); return v? v : d; }
+static std::string HUB_ADDR = env_str("HUB_ADDR", "127.0.0.1:50051");
+
+static inline uint64_t mono_ns(){
+  using namespace std::chrono;
+  return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
+}
+
+static void on_sigint(int){ g_run.store(false); }
+
+int main(){
+  std::signal(SIGINT, on_sigint);
+  fprintf(stderr, "[rover] hub=%s\n", HUB_ADDR.c_str());
+
+  // --- create channel (h2c, no TLS) ---
+  auto channel = grpc::CreateChannel(HUB_ADDR, grpc::InsecureChannelCredentials());
+  std::unique_ptr<Telemetry::Stub> stub = Telemetry::NewStub(channel);
+
+  // --- open client-stream and send ONE test message ---
+  ClientContext ctx;
+  Ack ack;
+  std::unique_ptr<grpc::ClientWriter<Sample>> writer(stub->PublishSamples(&ctx, &ack));
+  if(!writer){
+    fprintf(stderr, "[rover] failed to create writer\n");
+    return 1;
+  }
+
+  // --- test payload ---
+  Sample s;
+  s.set_angle_cdeg(69420);   // 123.45°
+  s.set_distance_mm(1000);   // 1.0 m
+  s.set_intensity(42);       // arbitrary
+  s.set_mono_ns(mono_ns());  // client monotonic timestamp
+
+  if(!writer->Write(s)){
+    fprintf(stderr, "[rover] write failed (stream closed by server)\n");
+  }
+
+  // Close request stream and finish
+  writer->WritesDone();
+  Status st = writer->Finish();
+
+  if(!st.ok()){
+    fprintf(stderr, "[rover] finish error: (%d) %s\n", st.error_code(), st.error_message().c_str());
+    return 2;
+  }
+
+  fprintf(stderr, "[rover] ack.received=%llu\n", (unsigned long long)ack.received());
+
+  return 0;
+}
