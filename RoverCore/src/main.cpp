@@ -55,10 +55,12 @@ struct Point {
     float x, y;
 };
 
-Point sample_from_origin(Point origin, float angle_deg, float distance_mm) {
-    float rad = angle_deg * M_PI / 180.0;
-    float x = origin.x + distance_mm / 1000.0f * std::cos(rad);
-    float y = origin.y + distance_mm / 1000.0f * std::sin(rad);
+static inline Point sample_from_origin(Point origin, float angle_deg, float distance_mm) {
+    float r = distance_mm * 0.001f;
+    float theta_math_deg = 90.0f - angle_deg;
+    float rad = theta_math_deg * float(M_PI) / 180.0f;
+    float x = origin.x + r * std::cos(rad);
+    float y = origin.y + r * std::sin(rad);
     return {x, y};
 }
 
