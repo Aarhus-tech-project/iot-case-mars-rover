@@ -11,7 +11,7 @@
 
 #define GRID_WIDTH 32
 #define GRID_HEIGHT 32
-#define GRID_CELL_SIZE_M 0.80f
+#define GRID_CELL_SIZE_M 0.10f
 
 static std::atomic<bool> g_run{true};
 static void on_sigint(int){ g_run.store(false); }
