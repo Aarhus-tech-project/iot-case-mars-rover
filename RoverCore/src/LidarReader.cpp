@@ -3,9 +3,12 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#ifdef _WIN32
+#else
 #include <poll.h>
-#include <fcntl.h>
 #include <termios.h>
+#endif
+#include <fcntl.h>
 #include <unistd.h>
 
 using namespace std;
@@ -21,6 +24,10 @@ uint64_t LidarReader::mono_ns() {
 }
 
 unsigned long LidarReader::baud_to_term_(int baud) {
+  #ifdef _WIN32
+  return 0;
+  #else
+
   switch (baud) {
     case 9600: return B9600;
     case 19200: return B19200;
@@ -30,9 +37,15 @@ unsigned long LidarReader::baud_to_term_(int baud) {
     case 230400: return B230400;
     default: return B230400;
   }
+
+  #endif
 }
 
-bool LidarReader::configure_port_() {
+bool LidarReader::configure_port_() {  
+  #ifdef _WIN32
+  return false;
+  #else
+
   termios tio{};
   if (tcgetattr(fd_, &tio) != 0) {
     perror("tcgetattr");
@@ -59,6 +72,8 @@ bool LidarReader::configure_port_() {
   }
   tcflush(fd_, TCIFLUSH);
   return true;
+
+  #endif
 }
 
 bool LidarReader::open() {
@@ -83,6 +98,9 @@ void LidarReader::close() {
 }
 
 bool LidarReader::pump(const Callback& on_point, int poll_timeout_ms) {
+  #ifdef _WIN32
+  #else
+
   if (fd_ < 0) return false;
   bool any = false;
 
@@ -136,4 +154,6 @@ bool LidarReader::pump(const Callback& on_point, int poll_timeout_ms) {
     }
   }
   return any;
+
+  #endif
 }
