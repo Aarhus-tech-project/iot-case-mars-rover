@@ -19,37 +19,21 @@ using grpc::ClientContext;
 using grpc::Status;
 using rover::v1::Telemetry;
 using rover::v1::GridFrame;
+using rover::v1::Pose2D;
 using rover::v1::Ack;
 
 #define HUB_ADDRESS "127.0.0.1:50051"
 
+#define LIDAR_SERIAL_PORT "/dev/serial0"
+#define LIDAR_SERIAL_BAUD 230400
+#define LIDAR_MAX_MM 12000
+
 #define GRID_WIDTH 1024
 #define GRID_HEIGHT 1024
-#define GRID_CELL_SIZE_M 0.01f
+#define GRID_CELL_SIZE_M 0.05f
 
 static std::atomic<bool> g_run{true};
 static void on_sigint(int){ g_run.store(false); }
-
-static std::string env_str(const char* k, const char* d){ const char* v=getenv(k); return v? v : d; }
-static int env_int(const char* k, int d){ const char* v=getenv(k); return v? std::atoi(v) : d; }
-
-// map 0..255 to grayscale and write PGM
-template <size_t W, size_t H>
-bool save_grid_pgm(const OccupancyGrid<W,H>& grid, const char* path) {
-    std::ofstream f(path, std::ios::binary);
-    if (!f) return false;
-    // P5 = binary graymap, W H, maxval 255
-    f << "P5\n" << W << " " << H << "\n255\n";
-    // top row first? If you want (0,0) bottom-left, reverse y here.
-    for (size_t y = 0; y < H; ++y) {
-        for (size_t x = 0; x < W; ++x) {
-
-            uint8_t v = grid.at(x, y);
-            f.put(static_cast<char>(v));
-        }
-    }
-    return f.good();
-}
 
 struct Point {
     float x, y;
@@ -73,34 +57,28 @@ int main(){
 
     ClientContext ctx;
     Ack ack;
-    std::unique_ptr<grpc::ClientWriter<GridFrame>> writer(stub->PublishGrid(&ctx, &ack));
-    if(!writer){
-        fprintf(stderr, "[rover] failed to create writer\n");
-        return 1;
-    }
+    std::unique_ptr<grpc::ClientWriter<GridFrame>> gridFrameWriter(stub->PublishGrid(&ctx, &ack));
+    std::unique_ptr<grpc::ClientWriter<Pose2D>> pose2DWriter(stub->PublishPose(&ctx, &ack));
 
     // Lidar and SLAM setup
     float rover_x_m = GRID_WIDTH * GRID_CELL_SIZE_M / 2;
     float rover_y_m = GRID_HEIGHT * GRID_CELL_SIZE_M / 2;
+    float rover_theta = M_PI;
 
     std::signal(SIGINT, on_sigint);
 
-    std::string port = "/dev/serial0";
-    int baud = 230400;
-    int max_mm = 12000;
-
-    LidarReader lr(port, baud, max_mm);
+    LidarReader lr(LIDAR_SERIAL_PORT, LIDAR_SERIAL_BAUD, LIDAR_MAX_MM);
     if (!lr.open()) {
-        std::fprintf(stderr, "[lidar] failed to open %s @%d\n", port.c_str(), baud);
+        std::fprintf(stderr, "[lidar] failed to open %s @%d\n", LIDAR_SERIAL_PORT, LIDAR_SERIAL_BAUD);
         return 1;
     }
-    std::fprintf(stderr, "[lidar] reading %s @%d (max=%dmm)\n", port.c_str(), baud, max_mm);
+    std::fprintf(stderr, "[lidar] reading %s @%d (max=%dmm)\n", LIDAR_SERIAL_PORT, LIDAR_SERIAL_BAUD, LIDAR_MAX_MM);
 
-    auto cb = [&](uint32_t angle_cdeg, uint32_t dist_mm, uint32_t intensity, uint64_t t_ns){
+    auto cb = [&](uint32_t angle_cdeg, uint32_t dist_mm, uint32_t intensity, uint64_t t_ns) {
 
         Point samplePoint = sample_from_origin({rover_x_m, rover_y_m}, angle_cdeg / 100.0f, dist_mm);
         auto [gx, gy] = grid.worldToGrid(samplePoint.x, samplePoint.y);
-        if (grid.inBounds(gx, gy)) grid.at(gx, gy) += 8;
+        if (grid.inBounds(gx, gy)) grid.at(gx, gy) += 80;
 
         auto [rgx, rgy] = grid.worldToGrid(rover_x_m, rover_y_m);
         int dx = std::abs(gx - rgx), sx = rgx < gx ? 1 : -1;
@@ -109,13 +87,14 @@ int main(){
         while (true) {
             if (grid.inBounds(rgx, rgy)) {
                 uint8_t& v = grid.at(rgx, rgy);
-                if (v > 0) v -= 2;
+                if (v > 0) v -= 20;
             }
             if (rgx == gx && rgy == gy) break;
             e2 = 2 * err;
             if (e2 >= dy) { err += dy; rgx += sx; }
             if (e2 <= dx) { err += dx; rgy += sy; }
         }
+
     };
 
     auto last_push = std::chrono::steady_clock::now();
@@ -125,28 +104,35 @@ int main(){
 
         auto now = std::chrono::steady_clock::now();
         if (now - last_push >= std::chrono::seconds(5)) {
-            GridFrame msg;
-            msg.set_width(GRID_WIDTH);
-            msg.set_height(GRID_HEIGHT);
-            msg.set_cell_size_m(GRID_CELL_SIZE_M);
-            msg.set_data(reinterpret_cast<const char*>(grid.data.data()), grid.data.size());
-            if (!writer->Write(msg)) {
+
+            GridFrame gridFrame;
+            gridFrame.set_width(GRID_WIDTH);
+            gridFrame.set_height(GRID_HEIGHT);
+            gridFrame.set_cell_size_m(GRID_CELL_SIZE_M);
+            gridFrame.set_data(reinterpret_cast<const char*>(grid.data.data()), grid.data.size());
+
+            if (!gridFrameWriter->Write(gridFrame)) {
                 std::fprintf(stderr, "[grpc] stream closed by server during Write()\n");
                 break;
             }
+
+            Pose2D pose2D;
+            pose2D.set_x_m(rover_x_m);
+            pose2D.set_y_m(rover_y_m);
+            pose2D.set_theta(rover_theta);
+
+            if (!pose2DWriter->Write(pose2D)) {
+                std::fprintf(stderr, "[grpc] stream closed by server during Write()\n");
+                break;
+            }
+
             last_push = now;
             std::fprintf(stderr, "[grpc] pushed grid snapshot (%ux%u)\n", GRID_WIDTH, GRID_HEIGHT);
         }
     }
 
-    if (!save_grid_pgm(grid, "/tmp/occgrid.pgm")) {
-        std::fprintf(stderr, "[grid] failed to write /tmp/occgrid.pgm\n");
-    } else {
-        std::fprintf(stderr, "[grid] wrote /tmp/occgrid.pgm\n");
-    }
-
-    writer->WritesDone();
-    Status st = writer->Finish();
+    gridFrameWriter->WritesDone();
+    pose2DWriter->WritesDone();
     lr.close();
     return 0;
 }

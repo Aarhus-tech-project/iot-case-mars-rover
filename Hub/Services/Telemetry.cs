@@ -19,4 +19,15 @@ public sealed class TelemetryService : Telemetry.TelemetryBase
         }
         return new Ack { Received = n };
     }
+
+    public override async Task<Ack> PublishPose(IAsyncStreamReader<Pose2D> requestStream, ServerCallContext context)
+    {
+        ulong n = 0;
+        await foreach (var m in requestStream.ReadAllAsync(context.CancellationToken))
+        {
+            Console.WriteLine($"Pose: x={m.XM:F2} y={m.YM:F2} theta={m.Theta:F1}");
+            n++;
+        }
+        return new Ack { Received = n };
+    }
 }

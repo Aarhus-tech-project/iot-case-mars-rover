@@ -1,16 +1,44 @@
 syntax = "proto3";
 package rover.v1;
 
+// ====================== Telemetry ======================
 message GridFrame {
-  uint32 width       = 1;  // pixels (cells) in X
-  uint32 height      = 2;  // pixels (cells) in Y
-  float  cell_size_m = 3;  // meters per cell
-  bytes  data        = 4;  // WIDTH*HEIGHT bytes, row-major (y=0..height-1, x=0..width-1)
+  uint32 width        = 1;
+  uint32 height       = 2;
+  float  cell_size_m  = 3;
+  bytes  data         = 4;   // width*height bytes, 0..255
+  uint64 t_mono_ns    = 5;   // snapshot time (monotonic ns)
 }
 
-message Ack { uint64 received = 1; }
+message Pose2D {
+  float  x_m          = 1;
+  float  y_m          = 2;
+  float  theta        = 3;   // radians (0 = +X, CCW+)
+  uint64 t_mono_ns    = 4;
+}
+
+message Ack {
+  uint64 received = 1;
+}
 
 service Telemetry {
-  // Stream full grids every N seconds, or just call once if you prefer.
   rpc PublishGrid (stream GridFrame) returns (Ack);
+  rpc PublishPose (stream Pose2D)    returns (Ack);
+}
+
+// ====================== Command ======================
+message TextCommand {
+  string text      = 1;   // e.g. "MOVE 10cm", "ROT 90deg", "STOP"
+  uint64 t_mono_ns = 2;
+}
+
+message TextReply {
+  string cmd_id    = 1;   // optional correlation
+  string status    = 2;   // "OK","RUNNING","DONE","ERROR"
+  string message   = 3;   // human-readable
+  uint64 t_mono_ns = 4;
+}
+
+service CommandLine {
+  rpc Stream (stream TextReply) returns (stream TextCommand);
 }
