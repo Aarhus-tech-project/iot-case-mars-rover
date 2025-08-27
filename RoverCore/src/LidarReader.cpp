@@ -10,6 +10,7 @@
 #endif
 #include <fcntl.h>
 #include <unistd.h>
+#include <utility>
 
 using namespace std;
 
@@ -77,6 +78,9 @@ bool LidarReader::configure_port_() {
 }
 
 bool LidarReader::open() {
+  #ifdef _WIN32
+  return false;
+  #else
   close();
   fd_ = ::open(port_.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
   if (fd_ < 0) {
@@ -88,6 +92,7 @@ bool LidarReader::open() {
     return false;
   }
   return true;
+  #endif
 }
 
 void LidarReader::close() {
