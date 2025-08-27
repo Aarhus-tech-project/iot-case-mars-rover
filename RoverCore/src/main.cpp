@@ -22,7 +22,7 @@ using rover::v1::GridFrame;
 using rover::v1::Pose2D;
 using rover::v1::Ack;
 
-#define HUB_ADDRESS "127.0.0.1:50051"
+#define HUB_ADDRESS "172.31.0.110:50051"
 
 #define LIDAR_SERIAL_PORT "/dev/serial0"
 #define LIDAR_SERIAL_BAUD 230400
@@ -55,10 +55,13 @@ int main(){
     auto channel = grpc::CreateChannel(HUB_ADDRESS, grpc::InsecureChannelCredentials());
     std::unique_ptr<Telemetry::Stub> stub = Telemetry::NewStub(channel);
 
-    ClientContext ctx;
-    Ack ack;
-    std::unique_ptr<grpc::ClientWriter<GridFrame>> gridFrameWriter(stub->PublishGrid(&ctx, &ack));
-    std::unique_ptr<grpc::ClientWriter<Pose2D>> pose2DWriter(stub->PublishPose(&ctx, &ack));
+    grpc::ClientContext gridCtx;
+    rover::v1::Ack gridAck;
+    auto gridWriter = stub->PublishGrid(&gridCtx, &gridAck);
+
+    grpc::ClientContext poseCtx;              // <-- separate
+    rover::v1::Ack poseAck;                   // <-- separate
+    auto poseWriter = stub->PublishPose(&poseCtx, &poseAck);
 
     // Lidar and SLAM setup
     float rover_x_m = GRID_WIDTH * GRID_CELL_SIZE_M / 2;
@@ -111,7 +114,7 @@ int main(){
             gridFrame.set_cell_size_m(GRID_CELL_SIZE_M);
             gridFrame.set_data(reinterpret_cast<const char*>(grid.data.data()), grid.data.size());
 
-            if (!gridFrameWriter->Write(gridFrame)) {
+            if (!gridWriter->Write(gridFrame)) {
                 std::fprintf(stderr, "[grpc] stream closed by server during Write()\n");
                 break;
             }
@@ -121,7 +124,7 @@ int main(){
             pose2D.set_y_m(rover_y_m);
             pose2D.set_theta(rover_theta);
 
-            if (!pose2DWriter->Write(pose2D)) {
+            if (!poseWriter->Write(pose2D)) {
                 std::fprintf(stderr, "[grpc] stream closed by server during Write()\n");
                 break;
             }
@@ -131,8 +134,8 @@ int main(){
         }
     }
 
-    gridFrameWriter->WritesDone();
-    pose2DWriter->WritesDone();
+    gridWriter->WritesDone();
+    poseWriter->WritesDone();
     lr.close();
     return 0;
 }
