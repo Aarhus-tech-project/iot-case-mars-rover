@@ -71,9 +71,9 @@ int main() {
     std::fprintf(stderr, "[lidar] reading %s @%d (max=%dmm)\n", LIDAR_SERIAL_PORT, LIDAR_SERIAL_BAUD, LIDAR_MAX_MM);
 
     auto cb = [&](uint32_t angle_cdeg, uint32_t dist_mm, uint32_t intensity, uint64_t t_ns) {
-        Ray r(rover_x_m, rover_y_m, angle_cdeg / 100.0f, dist_mm, t_ns);
+        Ray ray(rover_x_m, rover_y_m, angle_cdeg / 100.0f, dist_mm, t_ns);
 
-        auto [gx, gy] = grid.worldToGrid(r.point_x_m, r.point_y_m);
+        auto [gx, gy] = grid.worldToGrid(ray.point_x_m, ray.point_y_m);
         if (grid.inBounds(gx, gy)) grid.at(gx, gy) += 80;
 
         auto [rgx, rgy] = grid.worldToGrid(rover_x_m, rover_y_m);

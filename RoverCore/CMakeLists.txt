@@ -143,12 +143,15 @@ target_link_libraries(rover_core PRIVATE Threads::Threads)
 
 # ---------------- Warnings / opts ----------------
 if(MSVC)
-  target_compile_options(rover_core PRIVATE /W4 /permissive- /Zc:preprocessor /EHsc)
+  target_compile_options(rover_core PRIVATE
+    /W4 /permissive- /Zc:preprocessor /EHsc
+    $<$<CONFIG:Release>:/O2>
+  )
 else()
-  target_compile_options(rover_core PRIVATE -Wall -Wextra -Wpedantic)
-  if(CMAKE_BUILD_TYPE MATCHES "Release")
-    target_compile_options(rover_core PRIVATE -O2 -pipe)
-  endif()
+  target_compile_options(rover_core PRIVATE
+    -Wall -Wextra -Wpedantic
+    $<$<CONFIG:Release>:-O2 -pipe>
+  )
 endif()
 
 # Windows sockets (for some transitive deps)
