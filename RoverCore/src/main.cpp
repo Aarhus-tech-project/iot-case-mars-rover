@@ -41,7 +41,7 @@ static inline int32_t angDiffCdeg(int32_t a, int32_t b) {
     return (a - b + 54000) % 36000 - 18000;
 }
 
-int main(){
+int main() {
     OccupancyGrid<GRID_WIDTH, GRID_HEIGHT> grid(GRID_CELL_SIZE_M);
 
     // grpc setup
@@ -70,71 +70,34 @@ int main(){
     }
     std::fprintf(stderr, "[lidar] reading %s @%d (max=%dmm)\n", LIDAR_SERIAL_PORT, LIDAR_SERIAL_BAUD, LIDAR_MAX_MM);
 
-    std::vector<Ray> rollingRays;
-    size_t rollingHead = 0;
-    bool   havePrev = false;
-    uint32_t prev_cdeg = 0;
-    int64_t curr_unwrapped_cdeg = 0;
-    const int64_t ONE_TURN = 36000;
-
     auto cb = [&](uint32_t angle_cdeg, uint32_t dist_mm, uint32_t intensity, uint64_t t_ns) {
-        angle_cdeg %= 36000u;
+        Ray r(rover_x_m, rover_y_m, angle_cdeg / 100.0f, dist_mm, t_ns);
 
-        if (!havePrev) {
-            prev_cdeg = angle_cdeg;
-            curr_unwrapped_cdeg = angle_cdeg;
-            havePrev = true;
-        } else {
-            curr_unwrapped_cdeg += angDiffCdeg((int32_t)angle_cdeg, (int32_t)prev_cdeg);
-            prev_cdeg = angle_cdeg;
-        }
+        auto [gx, gy] = grid.worldToGrid(r.point_x_m, r.point_y_m);
+        if (grid.inBounds(gx, gy)) grid.at(gx, gy) += 80;
 
-        // push ray (your style)
-        Ray ray(rover_x_m, rover_y_m, angle_cdeg / 100.0f, dist_mm, t_ns);
-        rollingRays.push_back(ray);
-
-        // evict older than one revolution behind newest (advance head only)
-        while (rollingHead < rollingRays.size()) {
-            int64_t oldest_unwrapped = (int64_t)((rollingRays[rollingHead].angle_deg * 100.0f)); // rewrap to cdeg
-            // map oldest into the same unwrapped “turn” as current:
-            // take raw cdeg from angle_deg:
-            int64_t oldest_cdeg = (int64_t)std::llround(rollingRays[rollingHead].angle_deg * 100.0f);
-            // compute where that angle sits relative to current unwrapped:
-            int32_t step = angDiffCdeg((int32_t)(oldest_cdeg % 36000), (int32_t)(prev_cdeg));
-            int64_t mapped = curr_unwrapped_cdeg + step;
-            // if current - mapped > ONE_TURN, drop it
-            if ((curr_unwrapped_cdeg - mapped) > ONE_TURN) ++rollingHead;
-            else break;
+        auto [rgx, rgy] = grid.worldToGrid(rover_x_m, rover_y_m);
+        int dx = std::abs(gx - rgx), sx = rgx < gx ? 1 : -1;
+        int dy = -std::abs(gy - rgy), sy = rgy < gy ? 1 : -1;
+        int err = dx + dy, e2;
+        while (true) {
+            if (grid.inBounds(rgx, rgy)) {
+                uint8_t& v = grid.at(rgx, rgy);
+                if (v > 0) v -= 20;
+            }
+            if (rgx == gx && rgy == gy) break;
+            e2 = 2 * err;
+            if (e2 >= dy) { err += dy; rgx += sx; }
+            if (e2 <= dx) { err += dx; rgy += sy; }
         }
     };
 
     auto last_push = std::chrono::steady_clock::now();
-    while (g_run.load()){
+    while (g_run.load()) {
         lr.pump(cb, 10); 
 
         auto now = std::chrono::steady_clock::now();
         if (now - last_push >= std::chrono::seconds(5)) {
-
-            for (size_t i = 0; i < rollingRays.capacity(); i++)
-            {
-                auto [gx, gy] = grid.worldToGrid(rollingRays[i].point_x_m, rollingRays[i].point_y_m);
-                if (grid.inBounds(gx, gy)) grid.at(gx, gy) += 80;
-
-                auto [rgx, rgy] = grid.worldToGrid(rover_x_m, rover_y_m);
-                int dx = std::abs(gx - rgx), sx = rgx < gx ? 1 : -1;
-                int dy = -std::abs(gy - rgy), sy = rgy < gy ? 1 : -1;
-                int err = dx + dy, e2;
-                while (true) {
-                    if (grid.inBounds(rgx, rgy)) {
-                        uint8_t& v = grid.at(rgx, rgy);
-                        if (v > 0) v -= 20;
-                    }
-                    if (rgx == gx && rgy == gy) break;
-                    e2 = 2 * err;
-                    if (e2 >= dy) { err += dy; rgx += sx; }
-                    if (e2 <= dx) { err += dx; rgy += sy; }
-                }
-            }
 
             // Push telemetry over GRPC
             GridFrame gridFrame;
