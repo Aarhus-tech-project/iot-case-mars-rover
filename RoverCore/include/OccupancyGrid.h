@@ -1,6 +1,10 @@
+#pragma once
+
 #include <array>
 #include <cstdint>
 #include <utility>
+
+#include "Ray.h"
 
 template <size_t WIDTH, size_t HEIGHT>
 struct OccupancyGrid {
@@ -28,5 +32,25 @@ struct OccupancyGrid {
     }
     std::pair<float,float> gridToWorld(int gx, int gy) const {
         return { (gx + 0.5f) * cell_size_m, (gy + 0.5f) * cell_size_m };
+    }
+
+    void populateRayOnGrid(const Ray& ray) {
+        auto [gx, gy] = worldToGrid(ray.point_x_m, ray.point_y_m);
+        if (inBounds(gx, gy)) at(gx, gy) += 80;
+
+        auto [rgx, rgy] = worldToGrid(ray.origin_x_m, ray.origin_y_m);
+        int dx = std::abs(gx - rgx), sx = rgx < gx ? 1 : -1;
+        int dy = -std::abs(gy - rgy), sy = rgy < gy ? 1 : -1;
+        int err = dx + dy, e2;
+        while (true) {
+            if (inBounds(rgx, rgy)) {
+                uint8_t& v = at(rgx, rgy);
+                if (v > 0) v -= 20;
+            }
+            if (rgx == gx && rgy == gy) break;
+            e2 = 2 * err;
+            if (e2 >= dy) { err += dy; rgx += sx; }
+            if (e2 <= dx) { err += dx; rgy += sy; }
+        }
     }
 };

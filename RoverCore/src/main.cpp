@@ -92,8 +92,6 @@ int main() {
     uint32_t last_angle_cdeg;
     auto cb = [&](uint32_t angle_cdeg, uint32_t dist_mm, uint32_t intensity, uint64_t t_ns) {
         if (angle_cdeg < last_angle_cdeg) {
-            // bring backbuffer to frontbuffer
-            // Clean backbuffer
             buffer = std::move(backBuffer);
         }
 
@@ -112,23 +110,7 @@ int main() {
             
             std::cout << "Buffer size: " << buffer.size() << std::endl;
             for (Ray& ray : buffer) {
-                auto [gx, gy] = grid.worldToGrid(ray.point_x_m, ray.point_y_m);
-                if (grid.inBounds(gx, gy)) grid.at(gx, gy) += 80;
-
-                auto [rgx, rgy] = grid.worldToGrid(rover_x_m, rover_y_m);
-                int dx = std::abs(gx - rgx), sx = rgx < gx ? 1 : -1;
-                int dy = -std::abs(gy - rgy), sy = rgy < gy ? 1 : -1;
-                int err = dx + dy, e2;
-                while (true) {
-                    if (grid.inBounds(rgx, rgy)) {
-                        uint8_t& v = grid.at(rgx, rgy);
-                        if (v > 0) v -= 20;
-                    }
-                    if (rgx == gx && rgy == gy) break;
-                    e2 = 2 * err;
-                    if (e2 >= dy) { err += dy; rgx += sx; }
-                    if (e2 <= dx) { err += dx; rgy += sy; }
-                }
+                grid.populateRayOnGrid(ray);   
             }
 
             // Push telemetry over GRPC
