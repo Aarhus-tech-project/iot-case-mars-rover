@@ -13,6 +13,7 @@
 
 #include "LidarReader.h"
 #include "OccupancyGrid.h"
+#include "Motors.h"
 
 using grpc::Channel;
 using grpc::ClientContext;
@@ -101,6 +102,22 @@ int main(){
     };
 
     auto last_push = std::chrono::steady_clock::now();
+
+    Motors motors;
+
+    motors.forward();
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+
+    motors.left();
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    motors.right();
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    motors.reverse();
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+
+    motors.stop();
 
     while (g_run.load()){
         lr.pump(cb, 10); 
