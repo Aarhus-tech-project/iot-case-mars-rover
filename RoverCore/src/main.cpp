@@ -14,6 +14,7 @@
 #include "LidarReader.h"
 #include "OccupancyGrid.h"
 #include "Ray.h"
+#include "Motors.h"
 
 using grpc::Channel;
 using grpc::ClientContext;
@@ -42,6 +43,22 @@ static inline int32_t angDiffCdeg(int32_t a, int32_t b) {
 }
 
 int main() {
+    Motors motors;
+
+    motors.forward();
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+
+    motors.left();
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    motors.right();
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    motors.reverse();
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+
+    motors.stop();
+
     OccupancyGrid<GRID_WIDTH, GRID_HEIGHT> grid(GRID_CELL_SIZE_M);
 
     // grpc setup
