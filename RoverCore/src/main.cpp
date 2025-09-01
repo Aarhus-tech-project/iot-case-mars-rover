@@ -10,7 +10,6 @@
 #include <memory>
 #include <vector>
 #include <optional>
-
 #include <grpcpp/grpcpp.h>
 #include "telemetry.grpc.pb.h"
 
@@ -33,37 +32,57 @@ using rover::v1::Ack;
 static std::atomic<bool> g_run{true};
 static void on_sigint(int){ g_run.store(false); }
 
-// -------- angle helpers --------
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
-constexpr float DEG2RAD   = float(M_PI) / 180.0f;
-constexpr float CDEG2RAD  = float(M_PI) / 18000.0f; // centidegree -> rad
+// radians → centidegrees (0..36000 wrap optional)
+constexpr float RAD2CDEG = 18000.0f / float(M_PI);
 
-// If your LIDAR’s 0° isn’t straight-ahead in rover frame, set this.
-// Or put it in Config.h and include here.
-constexpr float LIDAR_MOUNT_YAW_RAD = 0.0f; // e.g. +90° -> 90*DEG2RAD
+// If your lidar’s 0° isn’t straight ahead, adjust this (radians).
+constexpr float LIDAR_MOUNT_YAW_RAD = 0.0f; // e.g. 90° => 1.57079632679f
 
 int main() {
-    using GridT = OccupancyGrid<GRID_WIDTH, GRID_HEIGHT>;
-    GridT grid(GRID_CELL_SIZE_M);
+    /*
+    Motors motors;
 
+    motors.forward();
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+
+    motors.left();
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    motors.right();
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    motors.reverse();
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+
+    motors.stop();
+    */
+
+    OccupancyGrid<GRID_WIDTH, GRID_HEIGHT> grid(GRID_CELL_SIZE_M);
     MonteCarloLocalization<GRID_WIDTH, GRID_HEIGHT> mcl(grid, MLC_NUM_PARTICLES);
-    mcl.ray_step = 8;
-    mcl.z_hit = 0.9f; mcl.z_rand = 0.1f;
 
-    // gRPC
+    // grpc setup
     auto channel = grpc::CreateChannel(HUB_ADDRESS, grpc::InsecureChannelCredentials());
     std::unique_ptr<Telemetry::Stub> stub = Telemetry::NewStub(channel);
 
-    grpc::ClientContext gridCtx;  Ack gridAck;  auto gridWriter  = stub->PublishGrid(&gridCtx,  &gridAck);
-    grpc::ClientContext poseCtx;  Ack poseAck;  auto poseWriter  = stub->PublishPose(&poseCtx,  &poseAck);
-    grpc::ClientContext lidarCtx; Ack lidarAck; auto lidarWriter = stub->PublishLidar(&lidarCtx, &lidarAck);
+    grpc::ClientContext gridCtx;
+    rover::v1::Ack gridAck;
+    auto gridWriter = stub->PublishGrid(&gridCtx, &gridAck);
 
-    // World frame: +X right, +Y up. In that convention, 0 rad = +X (east), π/2 = +Y (north).
-    float rover_x_m = GRID_WIDTH  * GRID_CELL_SIZE_M * 0.5f;
-    float rover_y_m = GRID_HEIGHT * GRID_CELL_SIZE_M * 0.5f;
-    float rover_theta = float(M_PI) * 0.5f; // facing "north"/up
+    grpc::ClientContext poseCtx;
+    rover::v1::Ack poseAck;
+    auto poseWriter = stub->PublishPose(&poseCtx, &poseAck);
+
+    grpc::ClientContext lidarCtx;
+    rover::v1::Ack lidarAck;
+    auto lidarWriter = stub->PublishLidar(&lidarCtx, &lidarAck);
+
+    // Lidar and SLAM setup
+    float rover_x_m = GRID_WIDTH * GRID_CELL_SIZE_M / 2;
+    float rover_y_m = GRID_HEIGHT * GRID_CELL_SIZE_M / 2;
+    float rover_theta = M_PI_2;
 
     std::signal(SIGINT, on_sigint);
 
@@ -74,88 +93,97 @@ int main() {
     }
     std::fprintf(stderr, "[lidar] reading %s @%d (max=%dmm)\n", LIDAR_SERIAL_PORT, LIDAR_SERIAL_BAUD, LIDAR_MAX_MM);
 
-    // Full-rev buffering
-    std::vector<Lidar> buffer, backBuffer;
-    uint32_t last_angle_cdeg = 0;
-    bool have_last = false;
-
+    std::vector<Lidar> buffer;
+    std::vector<Lidar> backBuffer;
+    uint32_t last_angle_cdeg;
     auto cb = [&](uint32_t angle_cdeg, uint32_t dist_mm, uint32_t intensity, uint64_t t_ns) {
-        // Detect wrap-around -> new sweep ready
-        if (have_last && angle_cdeg < last_angle_cdeg) {
+        if (angle_cdeg < last_angle_cdeg) {
             buffer = std::move(backBuffer);
-            backBuffer.clear();
         }
-        backBuffer.push_back({ angle_cdeg, dist_mm, intensity, t_ns });
+
+        Lidar lidar = { angle_cdeg, dist_mm, intensity, t_ns };
+        backBuffer.push_back(lidar);
+
         last_angle_cdeg = angle_cdeg;
-        have_last = true;
     };
 
     auto last_push = std::chrono::steady_clock::now();
     uint64_t last_ts = 0;
-
     while (g_run.load()) {
-        lr.pump(cb, 10);
+        lr.pump(cb, 10); 
 
         auto now = std::chrono::steady_clock::now();
-        if (now - last_push >= std::chrono::milliseconds(100)) { // ~10 Hz
+        if (now - last_push >= std::chrono::seconds(1)) {
+            
             if (!buffer.empty()) {
-                // dt from LIDAR timestamps
-                const uint64_t t_now_ns = buffer.back().time_ns;
+                uint64_t t_now_ns = buffer.back().time_ns;
                 float dt = (last_ts == 0) ? 0.1f : float(t_now_ns - last_ts) * 1e-9f;
                 if (dt <= 0) dt = 1e-3f;
 
-                // --- 1) MCL (use lidar in sensor frame; class handles rotation per particle) ---
+                // ---------- MCL FIRST: get pose estimate ----------
+                // No odometry yet? Pass nullopt. If you have odom deltas, pass them here.
                 mcl.iterate(buffer, std::nullopt, dt);
-                const auto est = mcl.estimateCached();
-                rover_x_m = est.x; rover_y_m = est.y; rover_theta = est.theta;
+                auto est = mcl.estimateCached();
+                rover_x_m   = est.x;
+                rover_y_m   = est.y;
+                rover_theta = est.theta;
 
-                // --- 2) Populate grid using WORLD angle for each beam ---
                 LidarScan scan;
-                for (const Lidar& li : buffer) {
-                    // Convert beam angle to world:
-                    //   world_angle = rover_theta + mount_yaw + lidar_angle(rad)
-                    const float beam_rad_world = rover_theta + LIDAR_MOUNT_YAW_RAD + (li.angle_cdeg * CDEG2RAD);
+                for (Lidar& lidar : buffer) {
+                    float world_cdeg = (rover_theta + LIDAR_MOUNT_YAW_RAD) * RAD2CDEG + float(lidar.angle_cdeg);
+                    // (optional) normalize
+                    if (world_cdeg < 0) world_cdeg = std::fmod(world_cdeg, 36000.0f) + 36000.0f;
+                    else                world_cdeg = std::fmod(world_cdeg, 36000.0f);
 
-                    // If your Ray expects CENTIDEGREES instead of radians, do:
-                    //   const float beam_cdeg_world = (rover_theta + LIDAR_MOUNT_YAW_RAD) * (18000.0f/float(M_PI)) + li.angle_cdeg;
-                    //   Ray ray(rover_x_m, rover_y_m, beam_cdeg_world, li.distance_mm, li.time_ns);
+                    Ray ray(rover_x_m, rover_y_m, world_cdeg / 100.0f, lidar.distance_mm, lidar.time_ns);
 
-                    Ray ray(rover_x_m, rover_y_m, beam_rad_world, li.distance_mm, li.time_ns);
-                    grid.populateRayOnGrid(ray);
+                    grid.populateRayOnGrid(ray);   
 
                     auto* p = scan.add_points();
                     p->set_x_m(ray.point_x_m);
                     p->set_y_m(ray.point_y_m);
                 }
 
-                // Publish
-                if (!lidarWriter->Write(scan)) { std::fprintf(stderr, "[grpc] LIDAR stream closed\n"); break; }
+                if (!lidarWriter->Write(scan)) {
+                    std::fprintf(stderr, "[grpc] stream closed by server during Write()\n");
+                    break;
+                }
+            }
 
-                GridFrame gf;
-                gf.set_width(GRID_WIDTH);
-                gf.set_height(GRID_HEIGHT);
-                gf.set_cell_size_m(GRID_CELL_SIZE_M);
-                gf.set_data(reinterpret_cast<const char*>(grid.data()), grid.size());
-                if (!gridWriter->Write(gf)) { std::fprintf(stderr, "[grpc] GRID stream closed\n"); break; }
 
-                Pose2D pose2D;
-                pose2D.set_x_m(rover_x_m);
-                pose2D.set_y_m(rover_y_m);
-                pose2D.set_theta(rover_theta);
-                if (!poseWriter->Write(pose2D)) { std::fprintf(stderr, "[grpc] POSE stream closed\n"); break; }
+            // Push telemetry over GRPC
+            GridFrame gridFrame;
+            gridFrame.set_width(GRID_WIDTH);
+            gridFrame.set_height(GRID_HEIGHT);
+            gridFrame.set_cell_size_m(GRID_CELL_SIZE_M);
+            gridFrame.set_data(reinterpret_cast<const char*>(grid.data()), grid.size());
 
-                last_ts = t_now_ns;
+            if (!gridWriter->Write(gridFrame)) {
+                std::fprintf(stderr, "[grpc] stream closed by server during Write()\n");
+                break;
+            }
+
+            Pose2D pose2D;
+            pose2D.set_x_m(rover_x_m);
+            pose2D.set_y_m(rover_y_m);
+            pose2D.set_theta(rover_theta);
+
+            if (!poseWriter->Write(pose2D)) {
+                std::fprintf(stderr, "[grpc] stream closed by server during Write()\n");
+                break;
             }
 
             last_push = now;
-            std::fprintf(stderr, "[grpc] pushed snapshot (%ux%u), pts=%zu\n",
-                         GRID_WIDTH, GRID_HEIGHT, buffer.size());
+            std::fprintf(stderr, "[grpc] pushed grid snapshot (%ux%u)\n", GRID_WIDTH, GRID_HEIGHT);
         }
     }
 
-    gridWriter->WritesDone();  gridWriter->Finish();
-    poseWriter->WritesDone();  poseWriter->Finish();
-    lidarWriter->WritesDone(); lidarWriter->Finish();
+    gridWriter->WritesDone();
+    gridWriter->Finish();
+    poseWriter->WritesDone();
+    poseWriter->Finish();
+    lidarWriter->WritesDone();
+    lidarWriter->Finish();
     lr.close();
     return 0;
 }
