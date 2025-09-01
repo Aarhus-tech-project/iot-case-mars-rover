@@ -8,6 +8,7 @@
 #include <fstream>
 #include <string>
 #include <memory>
+#include <vector>
 #include <grpcpp/grpcpp.h>
 #include "telemetry.grpc.pb.h"
 
