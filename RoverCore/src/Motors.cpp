@@ -30,8 +30,6 @@ Motors::Motors() {
     gpioSetMode(IB1, PI_OUTPUT);
     gpioSetMode(IB2, PI_OUTPUT);
 
-    speed = 64;
-
     stop();
 }
 
@@ -44,34 +42,34 @@ Motors::~Motors() {
 
 // Forward
 void Motors::forward() {
-    gpioPWM(IA1, speed);
+    gpioWrite(IA1, 1);
     gpioWrite(IA2, 0);
-    gpioPWM(IB1, speed);
+    gpioWrite(IB1, 1);
     gpioWrite(IB2, 0);
 }
 
 // Reverse
 void Motors::reverse() {
     gpioWrite(IA1, 0);
-    gpioPWM(IA2, speed);
+    gpioWrite(IA2, 1);
     gpioWrite(IB1, 0);
-    gpioPWM(IB2, speed);
+    gpioWrite(IB2, 1);
 }
 
 // Left turn
 void Motors::left() {
     gpioWrite(IA1, 0);
-    gpioPWM(IA2, speed); // reverse left
-    gpioPWM(IB1, speed); // forward right
+    gpioWrite(IA2, 1); // reverse left
+    gpioWrite(IB1, 1); // forward right
     gpioWrite(IB2, 0);
 }
 
 // Right turn
 void Motors::right() {
-    gpioPWM(IA1, speed); // forward left
+    gpioWrite(IA1, 1); // forward left
     gpioWrite(IA2, 0);
     gpioWrite(IB1, 0);
-    gpioPWM(IB2, speed); // reverse right
+    gpioWrite(IB2, 1); // reverse right
 }
 
 // Stop
