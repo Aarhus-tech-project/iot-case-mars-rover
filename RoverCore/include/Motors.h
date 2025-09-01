@@ -1,6 +1,3 @@
-#ifndef MOTORS_H
-#define MOTORS_H
-
 class Motors {
 public:
     Motors();
@@ -13,8 +10,6 @@ public:
     void stop();
 
 private:
-    int IA1, IA2; // Motor A GPIO pins
-    int IB1, IB2; // Motor B GPIO pins
+    int IA1, IA2, IB1, IB2;    // direction pins
+    int speed;                  // current speed (0-255)
 };
-
-#endif
