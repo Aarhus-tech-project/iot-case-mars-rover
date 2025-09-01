@@ -9,11 +9,14 @@
 #include <string>
 #include <memory>
 #include <vector>
+#include <optional>
 #include <grpcpp/grpcpp.h>
 #include "telemetry.grpc.pb.h"
 
-#include "LidarReader.h"
+#include "Config.h"
+#include "Lidar.h"
 #include "OccupancyGrid.h"
+#include "MonteCarloLocalization.h"
 #include "Ray.h"
 #include "Motors.h"
 
@@ -25,16 +28,6 @@ using rover::v1::GridFrame;
 using rover::v1::Pose2D;
 using rover::v1::LidarScan;
 using rover::v1::Ack;
-
-#define HUB_ADDRESS "127.0.0.1:50051"
-
-#define LIDAR_SERIAL_PORT "/dev/serial0"
-#define LIDAR_SERIAL_BAUD 230400
-#define LIDAR_MAX_MM 12000
-
-#define GRID_WIDTH 1024
-#define GRID_HEIGHT 1024
-#define GRID_CELL_SIZE_M 0.10f
 
 static std::atomic<bool> g_run{true};
 static void on_sigint(int){ g_run.store(false); }
@@ -59,6 +52,7 @@ int main() {
     */
 
     OccupancyGrid<GRID_WIDTH, GRID_HEIGHT> grid(GRID_CELL_SIZE_M);
+    MonteCarloLocalization<GRID_WIDTH, GRID_HEIGHT> mcl(grid, MLC_NUM_PARTICLES);
 
     // grpc setup
     auto channel = grpc::CreateChannel(HUB_ADDRESS, grpc::InsecureChannelCredentials());
@@ -90,47 +84,65 @@ int main() {
     }
     std::fprintf(stderr, "[lidar] reading %s @%d (max=%dmm)\n", LIDAR_SERIAL_PORT, LIDAR_SERIAL_BAUD, LIDAR_MAX_MM);
 
-    std::vector<Ray> buffer;
-    std::vector<Ray> backBuffer;
+    std::vector<Lidar> buffer;
+    std::vector<Lidar> backBuffer;
     uint32_t last_angle_cdeg;
     auto cb = [&](uint32_t angle_cdeg, uint32_t dist_mm, uint32_t intensity, uint64_t t_ns) {
         if (angle_cdeg < last_angle_cdeg) {
             buffer = std::move(backBuffer);
         }
 
-        Ray ray(rover_x_m, rover_y_m, angle_cdeg / 100.0f, dist_mm, t_ns);
-        backBuffer.push_back(ray);
+        Lidar lidar = { angle_cdeg, dist_mm, intensity, t_ns };
+        backBuffer.push_back(lidar);
 
         last_angle_cdeg = angle_cdeg;
     };
 
     auto last_push = std::chrono::steady_clock::now();
+    uint64_t last_ts = 0;
     while (g_run.load()) {
         lr.pump(cb, 10); 
 
         auto now = std::chrono::steady_clock::now();
         if (now - last_push >= std::chrono::seconds(1)) {
             
-            LidarScan scan;
-            for (Ray& ray : buffer) {
-                auto* p = scan.add_points();
-                p->set_x_m(ray.point_x_m);
-                p->set_y_m(ray.point_y_m);
+            if (!buffer.empty()) {
+                uint64_t t_now_ns = buffer.back().time_ns;
+                float dt = (last_ts == 0) ? 0.1f : float(t_now_ns - last_ts) * 1e-9f;
+                if (dt <= 0) dt = 1e-3f;
 
-                grid.populateRayOnGrid(ray);   
+                // ---------- MCL FIRST: get pose estimate ----------
+                // No odometry yet? Pass nullopt. If you have odom deltas, pass them here.
+                mcl.iterate(buffer, std::nullopt, dt);
+                auto est = mcl.estimateCached();
+                rover_x_m   = est.x;
+                rover_y_m   = est.y;
+                rover_theta = est.theta;
+
+                LidarScan scan;
+                for (Lidar& lidar : buffer) {
+                    Ray ray(rover_x_m, rover_y_m, lidar.angle_cdeg / 100.0f, lidar.distance_mm, lidar.time_ns);
+
+                    grid.populateRayOnGrid(ray);   
+
+                    auto* p = scan.add_points();
+                    p->set_x_m(ray.point_x_m);
+                    p->set_y_m(ray.point_y_m);
+                }
+
+                if (!lidarWriter->Write(scan)) {
+                    std::fprintf(stderr, "[grpc] stream closed by server during Write()\n");
+                    break;
+                }
             }
 
-            if (!lidarWriter->Write(scan)) {
-                std::fprintf(stderr, "[grpc] stream closed by server during Write()\n");
-                break;
-            }
 
             // Push telemetry over GRPC
             GridFrame gridFrame;
             gridFrame.set_width(GRID_WIDTH);
             gridFrame.set_height(GRID_HEIGHT);
             gridFrame.set_cell_size_m(GRID_CELL_SIZE_M);
-            gridFrame.set_data(reinterpret_cast<const char*>(grid.data.data()), grid.data.size());
+            gridFrame.set_data(reinterpret_cast<const char*>(grid.data()), grid.size());
 
             if (!gridWriter->Write(gridFrame)) {
                 std::fprintf(stderr, "[grpc] stream closed by server during Write()\n");

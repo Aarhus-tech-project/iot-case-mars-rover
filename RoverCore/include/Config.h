@@ -1,0 +1,13 @@
+#pragma once 
+
+#define HUB_ADDRESS "127.0.0.1:50051"
+
+#define LIDAR_SERIAL_PORT "/dev/serial0"
+#define LIDAR_SERIAL_BAUD 230400
+#define LIDAR_MAX_MM 12000
+
+#define GRID_WIDTH 1024
+#define GRID_HEIGHT 1024
+#define GRID_CELL_SIZE_M 0.05f
+
+#define MLC_NUM_PARTICLES 1000
