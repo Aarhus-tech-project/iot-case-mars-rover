@@ -17,6 +17,15 @@ message Pose2D {
   uint64 t_mono_ns    = 4;
 }
 
+message LidarPoint {
+  float x_m = 1;
+  float y_m = 2;
+}
+
+message LidarScan {
+  repeated LidarPoint points = 1;
+}
+
 message Ack {
   uint64 received = 1;
 }
@@ -24,6 +33,7 @@ message Ack {
 service Telemetry {
   rpc PublishGrid (stream GridFrame) returns (Ack);
   rpc PublishPose (stream Pose2D)    returns (Ack);
+  rpc PublishLidar (stream LidarScan) returns (Ack);
 }
 
 // ====================== Command ======================

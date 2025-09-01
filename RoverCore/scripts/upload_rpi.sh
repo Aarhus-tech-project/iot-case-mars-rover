@@ -1,0 +1,1 @@
+scp out/rover_core_rpi3 rover@rover.local:/home/rover
