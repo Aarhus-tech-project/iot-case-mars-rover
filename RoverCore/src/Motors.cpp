@@ -2,7 +2,8 @@
 #if defined(_WIN32) || defined(__APPLE__) || defined(__x86_64__)
 #include "wiringPi_stub.h"
 #else
-#include <wiringPi.h>
+#include "wiringPi_stub.h"
+//#include <wiringPi.h>
 #endif
 #include <iostream>
 

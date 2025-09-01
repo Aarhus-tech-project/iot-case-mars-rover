@@ -22,9 +22,10 @@ using grpc::Status;
 using rover::v1::Telemetry;
 using rover::v1::GridFrame;
 using rover::v1::Pose2D;
+using rover::v1::LidarScan;
 using rover::v1::Ack;
 
-#define HUB_ADDRESS "172.31.0.110:50051"
+#define HUB_ADDRESS "127.0.0.1:50051"
 
 #define LIDAR_SERIAL_PORT "/dev/serial0"
 #define LIDAR_SERIAL_BAUD 230400
@@ -32,17 +33,13 @@ using rover::v1::Ack;
 
 #define GRID_WIDTH 1024
 #define GRID_HEIGHT 1024
-#define GRID_CELL_SIZE_M 0.05f
+#define GRID_CELL_SIZE_M 0.10f
 
 static std::atomic<bool> g_run{true};
 static void on_sigint(int){ g_run.store(false); }
 
-static inline int32_t angDiffCdeg(int32_t a, int32_t b) {
-    // shortest signed diff (-18000..18000]
-    return (a - b + 54000) % 36000 - 18000;
-}
-
 int main() {
+    /*
     Motors motors;
 
     motors.forward();
@@ -58,6 +55,7 @@ int main() {
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
     motors.stop();
+    */
 
     OccupancyGrid<GRID_WIDTH, GRID_HEIGHT> grid(GRID_CELL_SIZE_M);
 
@@ -73,10 +71,14 @@ int main() {
     rover::v1::Ack poseAck;
     auto poseWriter = stub->PublishPose(&poseCtx, &poseAck);
 
+    grpc::ClientContext lidarCtx;
+    rover::v1::Ack lidarAck;
+    auto lidarWriter = stub->PublishLidar(&lidarCtx, &lidarAck);
+
     // Lidar and SLAM setup
     float rover_x_m = GRID_WIDTH * GRID_CELL_SIZE_M / 2;
     float rover_y_m = GRID_HEIGHT * GRID_CELL_SIZE_M / 2;
-    float rover_theta = M_PI;
+    float rover_theta = M_PI_2;
 
     std::signal(SIGINT, on_sigint);
 
@@ -106,11 +108,20 @@ int main() {
         lr.pump(cb, 10); 
 
         auto now = std::chrono::steady_clock::now();
-        if (now - last_push >= std::chrono::seconds(5)) {
+        if (now - last_push >= std::chrono::seconds(1)) {
             
-            std::cout << "Buffer size: " << buffer.size() << std::endl;
+            LidarScan scan;
             for (Ray& ray : buffer) {
+                auto* p = scan.add_points();
+                p->set_x_m(ray.point_x_m);
+                p->set_y_m(ray.point_y_m);
+
                 grid.populateRayOnGrid(ray);   
+            }
+
+            if (!lidarWriter->Write(scan)) {
+                std::fprintf(stderr, "[grpc] stream closed by server during Write()\n");
+                break;
             }
 
             // Push telemetry over GRPC
@@ -141,7 +152,11 @@ int main() {
     }
 
     gridWriter->WritesDone();
+    gridWriter->Finish();
     poseWriter->WritesDone();
+    poseWriter->Finish();
+    lidarWriter->WritesDone();
+    lidarWriter->Finish();
     lr.close();
     return 0;
 }
