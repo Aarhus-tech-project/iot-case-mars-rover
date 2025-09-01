@@ -131,7 +131,7 @@ file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS ${PROJECT_SRC_DIR}/*.cpp)
 
 add_executable(rover_core ${SRC_FILES})
 target_include_directories(rover_core PRIVATE ${PROJECT_INC_DIR})
-target_link_libraries(rover_core PRIVATE api_protos)
+target_link_libraries(rover_core PRIVATE api_protos pigpio)
 
 # Output dir ./build/bin
 set_target_properties(rover_core PROPERTIES
