@@ -13,8 +13,8 @@ public:
     void stop();
 
 private:
-    int IA1, IA2; // Motor A pins
-    int IB1, IB2; // Motor B pins
+    int IA1, IA2; // Motor A GPIO pins
+    int IB1, IB2; // Motor B GPIO pins
 };
 
 #endif

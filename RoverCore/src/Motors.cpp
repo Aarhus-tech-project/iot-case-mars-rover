@@ -1,58 +1,67 @@
 #include "Motors.h"
-#if defined(_WIN32) || defined(__APPLE__) || defined(__x86_64__)
-#include "wiringPi_stub.h"
-#else
-#include "wiringPi_stub.h"
-//#include <wiringPi.h>
-#endif
 #include <iostream>
 
+#if defined(_WIN32) || defined(__APPLE__) || defined(__x86_64__)
+// Minimal stub for PC/Mac: do nothing but allow compilation
+inline int gpioInitialise() { return 0; }
+inline void gpioTerminate() {}
+inline void gpioSetMode(int, int) {}
+inline void gpioWrite(int, int) {}
+#define PI_OUTPUT 1
+#else
+#include <pigpio.h>
+#endif
+
 Motors::Motors() {
-    // WiringPi setup
-    if (wiringPiSetup() == -1) {
-        std::cerr << "[motors] wiringPi setup failed!" << std::endl;
+    // Initialize pigpio (does nothing on PC/Mac)
+    if (gpioInitialise() < 0) {
+        std::cerr << "[motors] pigpio initialization failed!" << std::endl;
         return;
     }
 
-    // Assign wiringPi pin numbers (mapped from BCM GPIOs)
-    IA1 = 7; // GPIO4  (pin 7)
-    IA2 = 0; // GPIO17 (pin 11)
-    IB1 = 4; // GPIO23 (pin 16)
-    IB2 = 5; // GPIO24 (pin 18)
+    // BCM GPIO pins
+    IA1 = 4;   // GPIO4
+    IA2 = 17;  // GPIO17
+    IB1 = 23;  // GPIO23
+    IB2 = 24;  // GPIO24
 
-    pinMode(IA1, OUTPUT);
-    pinMode(IA2, OUTPUT);
-    pinMode(IB1, OUTPUT);
-    pinMode(IB2, OUTPUT);
+    // Set pins as output
+    gpioSetMode(IA1, PI_OUTPUT);
+    gpioSetMode(IA2, PI_OUTPUT);
+    gpioSetMode(IB1, PI_OUTPUT);
+    gpioSetMode(IB2, PI_OUTPUT);
 
     stop(); // start with motors off
 }
 
 Motors::~Motors() {
     stop();
+#if !(defined(_WIN32) || defined(__APPLE__) || defined(__x86_64__))
+    gpioTerminate();
+#endif
 }
 
 void Motors::forward() {
-    digitalWrite(IA1, HIGH); digitalWrite(IA2, LOW);
-    digitalWrite(IB1, HIGH); digitalWrite(IB2, LOW);
+    gpioWrite(IA1, 1); gpioWrite(IA2, 0);
+    gpioWrite(IB1, 1); gpioWrite(IB2, 0);
 }
 
 void Motors::reverse() {
-    digitalWrite(IA1, LOW); digitalWrite(IA2, HIGH);
-    digitalWrite(IB1, LOW); digitalWrite(IB2, HIGH);
+    gpioWrite(IA1, 0); gpioWrite(IA2, 1);
+    gpioWrite(IB1, 0); gpioWrite(IB2, 1);
 }
 
 void Motors::left() {
-    digitalWrite(IA1, LOW); digitalWrite(IA2, HIGH);  // reverse left
-    digitalWrite(IB1, HIGH); digitalWrite(IB2, LOW); // run right
+    gpioWrite(IA1, 0); gpioWrite(IA2, 1); // reverse left
+    gpioWrite(IB1, 1); gpioWrite(IB2, 0); // run right
 }
 
 void Motors::right() {
-    digitalWrite(IA1, HIGH); digitalWrite(IA2, LOW); // run left
-    digitalWrite(IB1, LOW); digitalWrite(IB2, HIGH);  // reverse right
+    gpioWrite(IA1, 1); gpioWrite(IA2, 0); // run left
+    gpioWrite(IB1, 0); gpioWrite(IB2, 1); // reverse right
 }
 
 void Motors::stop() {
-    digitalWrite(IA1, LOW); digitalWrite(IA2, LOW);
-    digitalWrite(IB1, LOW); digitalWrite(IB2, LOW);
+    gpioWrite(IA1, 0); gpioWrite(IA2, 0);
+    gpioWrite(IB1, 0); gpioWrite(IB2, 0);
 }
