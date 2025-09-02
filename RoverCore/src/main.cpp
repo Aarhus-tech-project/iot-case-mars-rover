@@ -144,7 +144,8 @@ int main() {
 
                 LidarScan scan;
                 for (Lidar& lidar : buffer) {
-                    Ray ray(rover_x_m, rover_y_m, lidar.angle_cdeg / 100.0f, lidar.distance_mm, lidar.time_ns);
+                    float rover_deg = rover_theta * RAD2CDEG;
+                    Ray ray(rover_x_m, rover_y_m, rover_deg + (lidar.angle_cdeg / 100.0f), lidar.distance_mm, lidar.time_ns);
 
                     grid.populateRayOnGrid(ray);   
 
