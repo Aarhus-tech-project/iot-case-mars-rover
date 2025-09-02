@@ -73,8 +73,8 @@ public:
 
     // Reinit particles uniformly over map
     void initUniform() {
-        std::uniform_real_distribution<float> xdist(0.f, GRID_WIDTH  * grid_.cellSizeM());
-        std::uniform_real_distribution<float> ydist(0.f, GRID_HEIGHT * grid_.cellSizeM());
+        std::uniform_real_distribution<float> xdist(0.f, WIDTH  * grid_.cellSizeM());
+        std::uniform_real_distribution<float> ydist(0.f, HEIGHT * grid_.cellSizeM());
         std::uniform_real_distribution<float> tdist(-float(M_PI), float(M_PI));
         for (auto& p : particles_) {
             p.x = xdist(rng_);
@@ -106,6 +106,7 @@ public:
 
     const std::vector<Particle>& particles() const noexcept { return particles_; }
     const Particle& estimateCached() const noexcept { return est_; }
+    float neffFraction() const noexcept { return last_neff_frac_; }
 
     // Tuning knobs (public so you can tweak quickly)
     float sigma_dx_base  = 0.02f;       // m / sqrt(s)
@@ -166,7 +167,7 @@ private:
                 const auto& b = z[i];
                 if (b.distance_mm == 0) continue; // skip invalid
 
-                const float ang = p.theta + (float(b.angle_cdeg) * 0.01f) * float(M_PI) / 180.f;
+                const float ang = p.theta + LIDAR_MOUNT_YAW_RAD + (float(b.angle_cdeg) * 0.01f) * float(M_PI) / 180.f;
                 const float r   = float(b.distance_mm) * mm_to_m;
 
                 const float wx = p.x + std::cos(ang) * r;
@@ -200,6 +201,7 @@ private:
         float sumsq = 0.f;
         for (const auto& p : particles_) sumsq += p.weight * p.weight;
         const float neff = (sumsq > 0.f) ? (1.f / sumsq) : 0.f;
+        last_neff_frac_ = (N_ > 0) ? (neff / float(N_)) : 0.f;
 
         if (neff >= neff_frac_threshold * float(N_)) return;
 
@@ -231,4 +233,5 @@ private:
     Particle est_{};
 
     std::mt19937 rng_;
+    float last_neff_frac_{1.0f};
 };

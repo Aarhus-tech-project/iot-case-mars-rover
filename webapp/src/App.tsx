@@ -31,7 +31,7 @@ const API_PREFIX = "http://localhost:5080";
 const MAX_LIDAR_POINTS = 5000;
 
 // visuals
-const BALL_R = 2;
+const BALL_R = 1;
 const BALL_FILL = 0x001aff;
 const BALL_FILL_A = 0.98;
 const BALL_OUT = 0x001aff;

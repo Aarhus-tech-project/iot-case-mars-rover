@@ -39,7 +39,6 @@ static void on_sigint(int){ g_run.store(false); }
 constexpr float RAD2CDEG = 18000.0f / float(M_PI);
 
 // If your lidar’s 0° isn’t straight ahead, adjust this (radians).
-constexpr float LIDAR_MOUNT_YAW_RAD = 0.0f; // e.g. 90° => 1.57079632679f
 
 int main() {
     /*
@@ -95,7 +94,7 @@ int main() {
 
     std::vector<Lidar> buffer;
     std::vector<Lidar> backBuffer;
-    uint32_t last_angle_cdeg;
+    uint32_t last_angle_cdeg = 0;
     auto cb = [&](uint32_t angle_cdeg, uint32_t dist_mm, uint32_t intensity, uint64_t t_ns) {
         if (angle_cdeg < last_angle_cdeg) {
             buffer = std::move(backBuffer);
@@ -109,6 +108,8 @@ int main() {
 
     auto last_push = std::chrono::steady_clock::now();
     uint64_t last_ts = 0;
+    uint32_t stamp_count = 0;
+    uint32_t WARMUP_STAMPS = 50;
     while (g_run.load()) {
         lr.pump(cb, 10); 
 
@@ -116,17 +117,30 @@ int main() {
         if (now - last_push >= std::chrono::seconds(1)) {
             
             if (!buffer.empty()) {
-                uint64_t t_now_ns = buffer.back().time_ns;
-                float dt = (last_ts == 0) ? 0.1f : float(t_now_ns - last_ts) * 1e-9f;
-                if (dt <= 0) dt = 1e-3f;
 
-                // ---------- MCL FIRST: get pose estimate ----------
-                // No odometry yet? Pass nullopt. If you have odom deltas, pass them here.
-                mcl.iterate(buffer, std::nullopt, dt);
-                auto est = mcl.estimateCached();
-                rover_x_m   = est.x;
-                rover_y_m   = est.y;
-                rover_theta = est.theta;
+                if (stamp_count >= WARMUP_STAMPS) {
+                    uint64_t t_now_ns = buffer.back().time_ns;
+                    float dt = (last_ts == 0) ? 0.1f : float(t_now_ns - last_ts) * 1e-9f;
+                    if (dt <= 0) dt = 1e-3f;
+
+                    // ---------- MCL FIRST: get pose estimate ----------
+                    // No odometry yet? Pass nullopt. If you have odom deltas, pass them here.
+                    mcl.iterate(buffer, std::nullopt, dt);
+                    auto est = mcl.estimateCached();
+                    rover_x_m   = est.x;
+                    rover_y_m   = est.y;
+                    rover_theta = est.theta;
+
+                    last_ts = t_now_ns;
+
+                    // Do some debugging output
+                    std::fprintf(stderr, "[slam] pose: x=%.2fm y=%.2fm θ=%.2f° neff=%.2f%% particles=%u\n",
+                                 rover_x_m, rover_y_m, rover_theta * 180.f / float(M_PI),
+                                 mcl.neffFraction() * 100.f, unsigned(MLC_NUM_PARTICLES));
+                }
+                else {
+                    std::fprintf(stderr, "[slam] warming up MCL (%u/%u)\n", stamp_count, WARMUP_STAMPS);
+                }
 
                 LidarScan scan;
                 for (Lidar& lidar : buffer) {
@@ -139,17 +153,19 @@ int main() {
 
                     grid.populateRayOnGrid(ray);   
 
+
                     auto* p = scan.add_points();
                     p->set_x_m(ray.point_x_m);
                     p->set_y_m(ray.point_y_m);
                 }
+
+                stamp_count++;
 
                 if (!lidarWriter->Write(scan)) {
                     std::fprintf(stderr, "[grpc] stream closed by server during Write()\n");
                     break;
                 }
             }
-
 
             // Push telemetry over GRPC
             GridFrame gridFrame;
@@ -174,7 +190,6 @@ int main() {
             }
 
             last_push = now;
-            std::fprintf(stderr, "[grpc] pushed grid snapshot (%ux%u)\n", GRID_WIDTH, GRID_HEIGHT);
         }
     }
 
