@@ -144,15 +144,9 @@ int main() {
 
                 LidarScan scan;
                 for (Lidar& lidar : buffer) {
-                    float world_cdeg = (rover_theta + LIDAR_MOUNT_YAW_RAD) * RAD2CDEG + float(lidar.angle_cdeg);
-                    // (optional) normalize
-                    if (world_cdeg < 0) world_cdeg = std::fmod(world_cdeg, 36000.0f) + 36000.0f;
-                    else                world_cdeg = std::fmod(world_cdeg, 36000.0f);
-
-                    Ray ray(rover_x_m, rover_y_m, world_cdeg / 100.0f, lidar.distance_mm, lidar.time_ns);
+                    Ray ray(rover_x_m, rover_y_m, lidar.angle_cdeg / 100.0f, lidar.distance_mm, lidar.time_ns);
 
                     grid.populateRayOnGrid(ray);   
-
 
                     auto* p = scan.add_points();
                     p->set_x_m(ray.point_x_m);
