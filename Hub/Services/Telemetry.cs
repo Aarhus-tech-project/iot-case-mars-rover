@@ -39,7 +39,7 @@ public sealed class TelemetryService : Telemetry.TelemetryBase
         await foreach (var m in requestStream.ReadAllAsync(context.CancellationToken))
         {
             n++;
-            await _hub.Clients.All.Pose(new PoseDto(m.XM, m.YM, m.Theta, n));
+            await _hub.Clients.All.Pose(new PoseDto(m.XM, m.YM, m.RotDeg, n));
         }
         return new Ack { Received = n };
     }

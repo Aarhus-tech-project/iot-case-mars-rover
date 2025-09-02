@@ -13,7 +13,7 @@ message GridFrame {
 message Pose2D {
   float  x_m          = 1;
   float  y_m          = 2;
-  float  theta        = 3;   // radians (0 = +X, CCW+)
+  float  rot_deg      = 3;
   uint64 t_mono_ns    = 4;
 }
 

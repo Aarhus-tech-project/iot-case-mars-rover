@@ -166,68 +166,38 @@ bool LidarReader::pump(const Callback& on_point, int poll_timeout_ms) {
   // 2) parse frames from buf_ (same code as non-Linux)
   any = parse_frames(on_point);
   return any;
-
 #else
-  // ---- Fake stream (macOS/Windows) ----
-  // Build one LD06-like frame (46 bytes, 12 samples), append to buf_, then parse it.
+  // ---- Full 360° simulation (macOS/Windows) ----
+  // Emit one complete revolution per call. No serial, no frames, no polling.
+  // Keeps your main code unchanged: it still receives points via `on_point(...)`.
 
-  static uint64_t last_t = 0;
-  static uint32_t start_angle_cdeg = 0;  // frame start angle (centideg)
-  uint64_t now = mono_ns();
+  (void)poll_timeout_ms;
 
-  // time-based spin: ~600 RPM default (10 rps)
-  const double rpm = 600.0;
-  const double cdeg_per_sec = rpm * 36000.0 / 60.0;
+  // Ensure M_PI exists on MSVC
+  #ifndef M_PI
+  #define M_PI 3.14159265358979323846
+  #endif
 
-  if (last_t == 0) last_t = now;
-  double dt = (now - last_t) * 1e-9; // seconds since last frame
-  last_t = now;
+  static uint64_t t_rev = 0;
+  if (t_rev == 0) t_rev = mono_ns();
+  else t_rev += 100000000ull; // +100 ms per synthetic revolution
 
-  // advance start angle according to time
-  start_angle_cdeg = (start_angle_cdeg + (uint32_t)(cdeg_per_sec * dt)) % 36000;
+  // Angular resolution of the sim (centi-degrees). 100 = 1.00°
+  static constexpr int STEP_CDEG = 100;
 
-  // frame parameters matching your parser
-  constexpr int N = 12;
-  const int step_cdeg = 300;                     // 3.00° per sample (arbitrary but consistent)
-  const int span = step_cdeg * (N - 1);          // total span in centideg for this frame
-  const uint32_t end_angle_cdeg = (start_angle_cdeg + span) % 36000;
-
-  // synthesize one frame
-  uint8_t f[46] = {};
-  f[0] = 0x54; f[1] = 0x2C;                      // header
-  // bytes [2..3] can be zero (speed/ct), not used by your parser
-  f[4] = (uint8_t)(start_angle_cdeg & 0xFF);
-  f[5] = (uint8_t)((start_angle_cdeg >> 8) & 0xFF);
-
-  // distances + intensities: 12 triples at f[6 + 3*k]
-  for (int k = 0; k < N; ++k) {
-    // reproduce the same angle math your parser will compute
-    uint32_t a_cdeg = (uint32_t)(start_angle_cdeg + (span * k) / (N - 1)) % 36000;
-    double a_deg = a_cdeg / 100.0;
-
-    // scene: 2m base + sine ripple (1..3m)
+  for (int a_cdeg = 0; a_cdeg < 36000; a_cdeg += STEP_CDEG) {
+    const double a_deg = a_cdeg / 100.0;
+    // Simple scene: 2 m base + sine ripple (1..3 m)
     double dist_m = 2.0 + std::sin(a_deg * M_PI / 180.0);
-    if (dist_m < 0.05) dist_m = 0.05;            // avoid zero
-    uint32_t dmm = (uint32_t)(dist_m * 1000.0);
-    if (dmm > (uint32_t)max_range_mm_) dmm = (uint32_t)max_range_mm_;
+    if (dist_m < 0.05) dist_m = 0.05;
 
-    f[6 + 3*k + 0] = (uint8_t)(dmm & 0xFF);
-    f[6 + 3*k + 1] = (uint8_t)((dmm >> 8) & 0xFF);
-    f[6 + 3*k + 2] = (uint8_t)(100 + (a_cdeg / 100) % 100); // fake intensity 100..199
+    uint32_t dmm = static_cast<uint32_t>(dist_m * 1000.0);
+    if (dmm > static_cast<uint32_t>(max_range_mm_))
+      dmm = static_cast<uint32_t>(max_range_mm_);
+
+    const uint32_t intensity = 150; // arbitrary constant intensity
+    on_point(static_cast<uint32_t>(a_cdeg), dmm, intensity, t_rev);
   }
-
-  // leave bytes [42..43] as end angle (little endian) because you use them
-  f[42] = (uint8_t)(end_angle_cdeg & 0xFF);
-  f[43] = (uint8_t)((end_angle_cdeg >> 8) & 0xFF);
-  // bytes [44..45] could be checksum; your parser doesn’t check, so zero is fine.
-
-  // append frame to the same buffer the Linux path fills
-  buf_.insert(buf_.end(), f, f + sizeof(f));
-
-  // parse exactly like Linux
-  bool any = parse_frames(on_point);
-  // respect poll_timeout_ms semantics a bit: if caller asked to wait, emulate small delay
-  (void)poll_timeout_ms; // not strictly needed; keeping signature
-  return any;
+  return true;
 #endif
 }

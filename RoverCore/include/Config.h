@@ -12,4 +12,4 @@ constexpr float LIDAR_MOUNT_YAW_RAD = 0.0f;
 #define GRID_HEIGHT 1024
 #define GRID_CELL_SIZE_M 0.05f
 
-#define MLC_NUM_PARTICLES 1000
+#define MLC_NUM_PARTICLES 10000
