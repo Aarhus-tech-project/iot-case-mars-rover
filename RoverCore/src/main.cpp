@@ -19,6 +19,7 @@
 #include "MonteCarloLocalization.h"
 #include "Ray.h"
 #include "Motors.h"
+#include "CommandStreamClient.h"
 
 using grpc::Channel;
 using grpc::ClientContext;
@@ -56,6 +57,9 @@ int main() {
 
     // grpc setup
     auto channel = grpc::CreateChannel(HUB_ADDRESS, grpc::InsecureChannelCredentials());
+    CommandStreamClient cmd(channel);
+    cmd.Start();
+
     std::unique_ptr<Telemetry::Stub> stub = Telemetry::NewStub(channel);
 
     grpc::ClientContext gridCtx;
@@ -156,5 +160,6 @@ int main() {
     lidarWriter->WritesDone();
     lidarWriter->Finish();
     lr.close();
+    cmd.Stop();
     return 0;
 }

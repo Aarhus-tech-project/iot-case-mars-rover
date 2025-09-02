@@ -5,6 +5,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddGrpc();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<GridState>();
+builder.Services.AddSingleton<IRoverCommandHub, RoverCommandHub>();
+
+builder.Services.AddHostedService<ConsoleFeeder>();
 
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
     p.WithOrigins("http://localhost:5173")
@@ -17,6 +20,8 @@ var app = builder.Build();
 app.UseCors();
 
 app.MapGrpcService<TelemetryService>();
+app.MapGrpcService<CommandLineService>();
+
 app.MapHub<TelemetryHub>("/telemetryHub");
 
 app.MapGet("/grid.png", (GridState state) =>
