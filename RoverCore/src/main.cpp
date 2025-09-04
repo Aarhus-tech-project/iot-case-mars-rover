@@ -97,6 +97,18 @@ int main() {
 
         auto last_push = std::chrono::steady_clock::now();
         bool first = true;
+
+        std::thread input_thread([] {
+            std::string line;
+            while (std::getline(std::cin, line)) {
+                if (line == "exit") {
+                    std::fprintf(stderr, "[main] received 'exit' from input\n");
+                    g_run.store(false);
+                    break;
+                }
+            }
+        });
+
         while (g_run.load()) {
             lr.pump(cb, 10); 
 
@@ -163,6 +175,11 @@ int main() {
         lidarWriter->Finish();
         lr.close();
         cmd.Stop();
+
+        if (input_thread.joinable()) {
+            input_thread.join();
+        }
+    
         return 0;
     }
     catch (const std::exception& ex) {
