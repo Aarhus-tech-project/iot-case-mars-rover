@@ -64,8 +64,6 @@ int main() {
     args.SetInt(GRPC_ARG_KEEPALIVE_PERMIT_WITHOUT_CALLS, 1);
 
     auto channel = grpc::CreateCustomChannel(HUB_ADDRESS, grpc::InsecureChannelCredentials(), args);
-    CommandStreamClient cmd(channel);
-    cmd.Start();
 
     std::unique_ptr<Telemetry::Stub> stub = Telemetry::NewStub(channel);
 
@@ -175,6 +173,5 @@ int main() {
     lidarWriter->WritesDone();
     lidarWriter->Finish();
     lr.close();
-    cmd.Stop();
     return 0;
 }
