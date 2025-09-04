@@ -95,26 +95,26 @@ int main() {
             last_angle_cdeg = angle_cdeg;
         };
 
-    auto last_push = std::chrono::steady_clock::now();
-    bool first = true;
-    while (g_run.load()) {
-        lr.pump(cb, 10); 
+        auto last_push = std::chrono::steady_clock::now();
+        bool first = true;
+        while (g_run.load()) {
+            lr.pump(cb, 10); 
 
-        auto now = std::chrono::steady_clock::now();
-        if (now - last_push >= std::chrono::milliseconds(1000)) {
+            auto now = std::chrono::steady_clock::now();
+            if (now - last_push >= std::chrono::milliseconds(1000)) {
             
-            if (!buffer.empty()) {
-                if (first) {
-                    first = false;
+                if (!buffer.empty()) {
+                    if (first) {
+                        first = false;
 
-                    OrientationEstimate oe = EstimateHeadingFromScan(buffer, 3.0f, 0.30f, 0.02f, 12, LIDAR_MAX_MM);
-                    rover_rot_deg = oe.snapped_up_deg;
-                    std::printf("[slam] lidar points %d, initial heading %.1f° (used %d segments)\n", buffer.size(), rover_rot_deg, oe.used_segments);
-                }
+                        OrientationEstimate oe = EstimateHeadingFromScan(buffer, 3.0f, 0.30f, 0.02f, 12, LIDAR_MAX_MM);
+                        rover_rot_deg = oe.snapped_up_deg;
+                        std::printf("[slam] lidar points %d, initial heading %.1f° (used %d segments)\n", buffer.size(), rover_rot_deg, oe.used_segments);
+                    }
 
-                LidarScan scan;
-                for (Lidar& lidar : buffer) {
-                    Ray ray(rover_x_m, rover_y_m, rover_rot_deg + lidar.angle_cdeg / 100.0f, lidar.distance_mm, lidar.time_ns);
+                    LidarScan scan;
+                    for (Lidar& lidar : buffer) {
+                        Ray ray(rover_x_m, rover_y_m, rover_rot_deg + lidar.angle_cdeg / 100.0f, lidar.distance_mm, lidar.time_ns);
 
                         grid.populateRayOnGrid(ray);   
 
