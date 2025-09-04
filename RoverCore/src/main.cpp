@@ -11,6 +11,7 @@
 #include <vector>
 #include <optional>
 #include <grpcpp/grpcpp.h>
+#include <grpcpp/support/channel_arguments.h>
 #include "telemetry.grpc.pb.h"
 
 #include "Config.h"
@@ -20,6 +21,7 @@
 #include "Ray.h"
 #include "Motors.h"
 #include "CommandStreamClient.h"
+#include "OrientationEstimate.h"
 
 using grpc::Channel;
 using grpc::ClientContext;
@@ -40,7 +42,13 @@ int main() {
         MonteCarloLocalization<GRID_WIDTH, GRID_HEIGHT> mcl(grid);
 
         // grpc setup
-        auto channel = grpc::CreateChannel(HUB_ADDRESS, grpc::InsecureChannelCredentials());
+        grpc::ChannelArguments args;
+        args.SetInt(GRPC_ARG_KEEPALIVE_TIME_MS, 30000);
+        args.SetInt(GRPC_ARG_KEEPALIVE_TIMEOUT_MS, 10000);
+        args.SetInt(GRPC_ARG_KEEPALIVE_PERMIT_WITHOUT_CALLS, 1);
+
+        auto channel = grpc::CreateCustomChannel(HUB_ADDRESS, grpc::InsecureChannelCredentials(), args);
+
         Motors motors;
         CommandStreamClient cmd(channel, &motors);
         cmd.Start();
@@ -87,17 +95,26 @@ int main() {
             last_angle_cdeg = angle_cdeg;
         };
 
-        auto last_push = std::chrono::steady_clock::now();
-        while (g_run.load()) {
-            lr.pump(cb, 10); 
+    auto last_push = std::chrono::steady_clock::now();
+    bool first = true;
+    while (g_run.load()) {
+        lr.pump(cb, 10); 
 
-            auto now = std::chrono::steady_clock::now();
-            if (now - last_push >= std::chrono::milliseconds(1000)) {
-                
-                if (!buffer.empty()) {
-                    LidarScan scan;
-                    for (Lidar& lidar : buffer) {
-                        Ray ray(rover_x_m, rover_y_m, rover_rot_deg + lidar.angle_cdeg / 100.0f, lidar.distance_mm, lidar.time_ns);
+        auto now = std::chrono::steady_clock::now();
+        if (now - last_push >= std::chrono::milliseconds(1000)) {
+            
+            if (!buffer.empty()) {
+                if (first) {
+                    first = false;
+
+                    OrientationEstimate oe = EstimateHeadingFromScan(buffer, 3.0f, 0.30f, 0.02f, 12, LIDAR_MAX_MM);
+                    rover_rot_deg = oe.snapped_up_deg;
+                    std::printf("[slam] lidar points %d, initial heading %.1f° (used %d segments)\n", buffer.size(), rover_rot_deg, oe.used_segments);
+                }
+
+                LidarScan scan;
+                for (Lidar& lidar : buffer) {
+                    Ray ray(rover_x_m, rover_y_m, rover_rot_deg + lidar.angle_cdeg / 100.0f, lidar.distance_mm, lidar.time_ns);
 
                         grid.populateRayOnGrid(ray);   
 

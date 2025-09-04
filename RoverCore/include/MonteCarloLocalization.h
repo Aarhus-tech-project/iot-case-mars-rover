@@ -37,7 +37,7 @@ public:
     }
 
     void Iterate(std::vector<Lidar> lidar) {
-        
+         
     }
 
 private:

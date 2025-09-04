@@ -22,7 +22,7 @@ type GridMetaDto = {
   tMonoNs: number;
   url: string;
 };
-type PoseDto = { xM: number; yM: number; theta: number; seq: number };
+type PoseDto = { xM: number; yM: number; rotDeg: number; seq: number };
 type LidarPointDto = { xM: number; yM: number };
 type LidarDto = { points: LidarPointDto[]; seq: number };
 
@@ -221,7 +221,7 @@ export default function App() {
       setPose({
         xM: dto.xM ?? dto.xm,
         yM: dto.yM ?? dto.ym,
-        theta: dto.theta,
+        rotDeg: dto.rotdeg,
         seq: dto.seq,
       }),
     );
@@ -639,7 +639,7 @@ export default function App() {
     poseG.rect(0, 0, grid.width, grid.height);
     poseG.stroke();
 
-    if (pose && Number.isFinite(pose.xM) && Number.isFinite(pose.yM) && Number.isFinite(pose.theta)) {
+    if (pose && Number.isFinite(pose.xM) && Number.isFinite(pose.yM) && Number.isFinite(pose.rotDeg)) {
       const rx = toPx(pose.xM),
         ry = toPy(pose.yM);
 
@@ -652,25 +652,11 @@ export default function App() {
       poseG.stroke();
 
       // arrow
-      const body = 22,
-        head = 8;
-      const c = Math.cos(pose.theta),
-        s = Math.sin(pose.theta);
-      const x2 = rx + c * body,
-        y2 = ry - s * body;
       poseG.setStrokeStyle({ width: 3, color: 0xffcc00, alpha: 1 });
       poseG.moveTo(rx, ry);
-      poseG.lineTo(x2, y2);
       poseG.stroke();
 
-      const lt = pose.theta + Math.PI * 0.75,
-        rt = pose.theta - Math.PI * 0.75;
-      const lx = x2 + Math.cos(lt) * head,
-        ly = y2 - Math.sin(lt) * head;
-      const rxh = x2 + Math.cos(rt) * head,
-        ryh = y2 - Math.sin(rt) * head;
       poseG.setFillStyle({ color: 0xffcc00, alpha: 1 });
-      poseG.moveTo(x2, y2).lineTo(lx, ly).lineTo(rxh, ryh).closePath();
       poseG.fill();
 
       poseG.circle(rx, ry, 4).fill();
@@ -773,7 +759,7 @@ export default function App() {
         <span>Status: {status}</span>
         <span>Grid: {grid ? `${grid.width}×${grid.height} @ ${grid.cellSizeM}m` : "—"}</span>
         <span>
-          Pose: {pose ? `x=${pose.xM.toFixed(2)} y=${pose.yM.toFixed(2)} θ=${pose.theta.toFixed(2)}` : "—"}
+          Pose: {pose ? `x=${pose.xM.toFixed(2)} y=${pose.yM.toFixed(2)}` : "—"}
         </span>
         <span>Lidar: {lidar?.points?.length ?? 0}</span>
 
