@@ -120,7 +120,7 @@ int main() {
                     first = false;
 
                     OrientationEstimate oe = EstimateHeadingFromScan(buffer, 3.0f, 0.30f, 0.02f, 12, LIDAR_MAX_MM);
-                    rover_rot_deg = oe.heading_up_deg;
+                    rover_rot_deg = oe.snapped_up_deg;
                     std::printf("[slam] lidar points %d, initial heading %.1f° (used %d segments)\n", buffer.size(), rover_rot_deg, oe.used_segments);
                 }
 
