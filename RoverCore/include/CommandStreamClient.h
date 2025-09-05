@@ -5,27 +5,20 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <sstream>
+#include <iostream>
 #include <cstdio>
 
 #include <grpcpp/grpcpp.h>
-#include "telemetry.grpc.pb.h"  // generated from your proto
-
-// Proto (server POV):
-// service CommandLine {s
-//   // Rover opens this call (client).
-//   // Rover -> Server: TextReply   (request stream)
-//   // Server -> Rover: TextCommand (response stream)
-//   rpc Stream (stream TextReply) returns (stream TextCommand);
-// }
-//
-// TextCommand: string cmd_id, string text, uint64 t_mono_ns (optional)
-// TextReply:   string cmd_id, string status, string message, uint64 t_mono_ns
+#include "telemetry.grpc.pb.h"
+#include "Motors.h"
 
 class CommandStreamClient {
 public:
-    explicit CommandStreamClient(std::shared_ptr<grpc::Channel> channel,
-                                 std::string rover_id = "rover-01")
-        : channel_(std::move(channel)), rover_id_(std::move(rover_id)) {}
+    CommandStreamClient(std::shared_ptr<grpc::Channel> channel,
+                        Motors* motors,
+                        std::string rover_id = "rover-01")
+        : channel_(std::move(channel)), motors_(motors), rover_id_(std::move(rover_id)) {}
 
     ~CommandStreamClient() { Stop(); }
 
@@ -58,10 +51,10 @@ private:
 
         while (running_.load()) {
             grpc::ClientContext ctx;
-            ctx.AddMetadata("x-rover-id", rover_id_);      // optional identifier
-            ctx.set_wait_for_ready(true);                  // wait for server
+            ctx.AddMetadata("x-rover-id", rover_id_);
+            ctx.set_wait_for_ready(true);
 
-            auto stream = stub.Stream(&ctx);               // ClientReaderWriter<TextReply, TextCommand>
+            auto stream = stub.Stream(&ctx); // ClientReaderWriter<TextReply, TextCommand>
             if (!stream) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms));
                 backoff_ms = std::min(backoff_ms * 2, backoff_cap);
@@ -79,17 +72,12 @@ private:
                 }
 
                 const std::string text = cmd.text();
+                std::printf("[CMD] received: \"%s\"\n", text.c_str());
 
-                // Print the received command
-                std::printf("[CMD] text=\"%s\"\n", text.c_str());
+                rover::v1::TextReply reply = handleCommand(text);
+                reply.set_t_mono_ns(mono_ns());
 
-                // Send a dumb default reply
-                rover::v1::TextReply r;
-                r.set_status("OK");
-                r.set_message("ack");
-                r.set_t_mono_ns(mono_ns());
-
-                if (!stream->Write(r)) {
+                if (!stream->Write(reply)) {
                     std::puts("[CMD] stream write failed (server closed?)");
                     break;
                 }
@@ -106,8 +94,54 @@ private:
         std::puts("[CMD] loop exit");
     }
 
+    rover::v1::TextReply handleCommand(const std::string& text) {
+        rover::v1::TextReply reply;
+        reply.set_status("OK");
+
+        std::istringstream iss(text);
+        std::string cmd;
+        int value = 0;
+        iss >> cmd >> value;
+
+        if (cmd == "FORWARD") {
+            moveDistance(value, true);
+            reply.set_message("Moved " + std::to_string(value) + " cm forward");
+        } else if (cmd == "REVERSE") {
+            moveDistance(value, false);
+            reply.set_message("Moved " + std::to_string(value) + " cm backward");
+        } else if (cmd == "ROT") {
+            rotateAngle(value);
+            reply.set_message("Rotated " + std::to_string(value) + " degrees");
+        } else if (cmd == "STOP") {
+            motors_->stop();
+            reply.set_message("Stopped");
+        } else {
+            reply.set_status("ERROR");
+            reply.set_message("Unknown command: " + text);
+        }
+
+        return reply;
+    }
+
+    void moveDistance(int cm, bool forward) {
+        if (forward) motors_->forward();
+        else motors_->reverse();
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(cm * 100)); // crude timing
+        motors_->stop();
+    }
+
+    void rotateAngle(int deg) {
+        int ms = std::abs(deg) * 10; // crude timing
+        if (deg > 0) motors_->left();
+        else motors_->right();
+        std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+        motors_->stop();
+    }
+
 private:
     std::shared_ptr<grpc::Channel> channel_;
+    Motors* motors_;
     std::string rover_id_;
     std::atomic<bool> running_{false};
     std::atomic<bool> cancel_{false};
