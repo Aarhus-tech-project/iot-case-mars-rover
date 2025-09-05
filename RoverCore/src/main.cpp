@@ -55,7 +55,6 @@ int main() {
     */
 
     OccupancyGrid<GRID_WIDTH, GRID_HEIGHT> grid(GRID_CELL_SIZE_M);
-    MonteCarloLocalization<GRID_WIDTH, GRID_HEIGHT> mcl(grid);
 
     // grpc setup
     grpc::ChannelArguments args;
@@ -116,6 +115,7 @@ int main() {
         if (now - last_push >= std::chrono::milliseconds(1000)) {
             
             if (!buffer.empty()) {
+                /* Manhatten orientation estimation
                 if (first) {
                     first = false;
 
@@ -123,6 +123,7 @@ int main() {
                     rover_rot_deg = oe.snapped_up_deg;
                     std::printf("[slam] lidar points %d, initial heading %.1f° (used %d segments)\n", buffer.size(), rover_rot_deg, oe.used_segments);
                 }
+                */
 
                 LidarScan scan;
                 for (Lidar& lidar : buffer) {
@@ -166,6 +167,37 @@ int main() {
             last_push = now;
         }
     }
+    
+    MonteCarloLocalization<GRID_WIDTH, GRID_HEIGHT> mcl(grid);
+    mcl.Iterate(buffer);
+    mcl.Iterate(buffer);
+    mcl.Iterate(buffer);
+    mcl.Iterate(buffer);
+    mcl.Iterate(buffer);
+    mcl.Iterate(buffer);
+    mcl.Iterate(buffer);
+    mcl.Iterate(buffer);
+    mcl.Iterate(buffer);
+    mcl.Iterate(buffer);
+    mcl.Iterate(buffer);
+    std::cout << "[mcl] iteration complete with " << buffer.size() << " lidar points\n";
+    for (const Particle& p : mcl.particles) {
+        std::printf("[mcl] particle: x=%.2f y=%.2f heading=%.1f° weight=%.3f\n", p.x, p.y, p.heading_deg, p.weight);
+    }
+    // Print Particle Confidence
+    Particle mean = mcl.GetMeanParticle();
+    std::printf("[mcl] mean particle: x=%.2f y=%.2f heading=%.1f° weight=%.3f\n", mean.x, mean.y, mean.heading_deg, mean.weight);
+
+    // Print best particle
+    Particle best = mcl.GetBestParticle();
+    float bestWeight = mcl.EvalutateParticle(buffer, best);
+    std::printf("[mcl] best w=%.6f  pose=(%.2f,%.2f, %.1f°)\n", bestWeight, best.x, best.y, best.heading_deg);
+
+    // Actual position
+    float fake_actual_evaluation = mcl.EvalutateParticle(buffer, { rover_x_m, rover_y_m, rover_rot_deg, 0.f });
+    std::printf("[mcl] actual pose: (%.2f,%.2f, %.1f°)  w=%.10f\n",
+                rover_x_m, rover_y_m, rover_rot_deg, fake_actual_evaluation);
+
 
     gridWriter->WritesDone();
     gridWriter->Finish();

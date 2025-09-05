@@ -6,7 +6,7 @@
 #define LIDAR_SERIAL_BAUD 230400
 #define LIDAR_MAX_MM 12000
 
-constexpr float LIDAR_MOUNT_YAW_RAD = 0.0f;
+#define LIDAR_MOUNT_YAW_DEG 0.0f;
 
 #define GRID_WIDTH 1024
 #define GRID_HEIGHT 1024
