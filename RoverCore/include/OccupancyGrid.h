@@ -51,8 +51,7 @@ public:
     std::pair<float,float> gridToWorld(int gx, int gy) const noexcept {
         return { (gx + 0.5f) * cell_size_m_, (gy + 0.5f) * cell_size_m_ };
     }
-
-    // -------- fast ray update: clipped + pointer-walk, saturating updates --------
+    
     void populateRayOnGrid(const Ray& ray) noexcept {
         // Convert to grid coords
         auto [gx, gy]   = worldToGrid(ray.point_x_m,  ray.point_y_m);   // hit
@@ -61,6 +60,19 @@ public:
         // Clip once; if fully outside, nothing to do
         int x0 = rgx, y0 = rgy, x1 = gx, y1 = gy;
         if (!clipLineToGrid(x0, y0, x1, y1)) return;
+
+        // --- Tunables (INDOOR) ---
+        constexpr float L_FREE_LAMBDA_M = 0.40f;  // free space falloff (~37% at 0.4 m)
+        constexpr float L_HIT_LAMBDA_M  = 1.80f;  // hit falloff (~37% at 1.8 m)
+        constexpr int   FREE_BASE       = 40;     // max decrement near sensor
+        constexpr int   HIT_BASE        = 80;     // max increment for close hits
+        constexpr int   FREE_FLOOR      = 1;      // minimum decrement per free cell
+        constexpr int   HIT_FLOOR       = 2;      // minimum increment at hit
+
+        // Precompute world-space total range (meters)
+        const float dxw = ray.point_x_m - ray.origin_x_m;
+        const float dyw = ray.point_y_m - ray.origin_y_m;
+        const float total_len_m = std::max(1e-6f, std::sqrt(dxw*dxw + dyw*dyw));
 
         // Bresenham on the clipped segment using pointer steps
         int dx = std::abs(x1 - x0), sx = (x0 < x1) ? 1 : -1;
@@ -72,23 +84,39 @@ public:
         const int stepX = sx;
         const int stepY = sy * int(WIDTH);
 
+        // For a quick along-ray parameter, count grid steps vs. max(|dx|,|dy|)
+        const int steps_max = std::max(std::abs(x1 - x0), std::abs(y1 - y0));
+        int steps_done = 0;
+
         while (true) {
-            // free space: subtract 40 with saturation
-            *p = sat_sub(*p, 40);
+            // Param t in [0..1] along the ray (approximate)
+            float t = (steps_max > 0) ? float(steps_done) / float(steps_max) : 0.0f;
+            float d_here_m = t * total_len_m;
+
+            // Free-space weight decays with distance
+            float w_free = std::exp(-d_here_m / L_FREE_LAMBDA_M);
+            int   decr   = std::max(FREE_FLOOR, int(std::lround(FREE_BASE * w_free)));
+            *p = sat_sub(*p, decr);
 
             if (x0 == x1 && y0 == y1) break;
             int e2 = err << 1;
             if (e2 >= dy) { err += dy; x0 += sx; p += stepX; }
             if (e2 <= dx) { err += dx; y0 += sy; p += stepY; }
+            ++steps_done;
         }
 
-        // Occupied hit cell: +80 with saturation (prefer original hit if inside)
-        if (inBounds(gx, gy)) {
-            value_type& h = at(size_t(gx), size_t(gy));
-            h = sat_add(h, 80);
-        } else {
-            value_type& h = at(size_t(x1), size_t(y1));
-            h = sat_add(h, 80);
+        // Occupied hit cell: increment with distance falloff based on total range
+        {
+            float w_hit = std::exp(-total_len_m / L_HIT_LAMBDA_M);
+            int   incr  = std::max(HIT_FLOOR, int(std::lround(HIT_BASE * w_hit)));
+
+            if (inBounds(gx, gy)) {
+                value_type& h = at(size_t(gx), size_t(gy));
+                h = sat_add(h, incr);
+            } else {
+                value_type& h = at(size_t(x1), size_t(y1));
+                h = sat_add(h, incr);
+            }
         }
     }
 

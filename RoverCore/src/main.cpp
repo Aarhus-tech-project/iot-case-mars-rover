@@ -204,10 +204,8 @@ int main() {
         mcl.Iterate(buffer);
         mcl.Iterate(buffer);
         mcl.Iterate(buffer);
-        std::cout << "[mcl] iteration complete with " << buffer.size() << " lidar points\n";
-        for (const Particle& p : mcl.particles) {
-            std::printf("[mcl] particle: x=%.2f y=%.2f heading=%.1f° weight=%.3f\n", p.x, p.y, p.heading_deg, p.weight);
-        }
+        mcl.Iterate(buffer);
+        mcl.Iterate(buffer);
         // Print Particle Confidence
         Particle mean = mcl.GetMeanParticle();
         std::printf("[mcl] mean particle: x=%.2f y=%.2f heading=%.1f° weight=%.3f\n", mean.x, mean.y, mean.heading_deg, mean.weight);
@@ -216,6 +214,11 @@ int main() {
         Particle best = mcl.GetBestParticle();
         float bestWeight = mcl.EvalutateParticle(buffer, best);
         std::printf("[mcl] best w=%.6f  pose=(%.2f,%.2f, %.1f°)\n", bestWeight, best.x, best.y, best.heading_deg);
+
+        // Print best paricle with optimal rotation
+        Particle best_rot = mcl.GetOptimalRotation(buffer, best);
+        float bestRotWeight = mcl.EvalutateParticle(buffer, best_rot);
+        std::printf("[mcl] best+rot w=%.6f  pose=(%.2f,%.2f, %.1f°)\n", bestRotWeight, best_rot.x, best_rot.y, best_rot.heading_deg);
 
         // Actual position
         float fake_actual_evaluation = mcl.EvalutateParticle(buffer, { rover_x_m, rover_y_m, rover_rot_deg, 0.f });
