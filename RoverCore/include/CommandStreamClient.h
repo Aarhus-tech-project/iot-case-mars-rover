@@ -103,16 +103,22 @@ private:
         int value = 0;
         iss >> cmd >> value;
 
-        if (cmd == "FORWARD") {
+        // Convert command to uppercase or lowercase (e.g., lowercase here)
+        std::transform(cmd.begin(), cmd.end(), cmd.begin(), [](unsigned char c) {
+            return std::tolower(c);
+        });
+
+        // Now compare with lowercase versions of commands
+        if (cmd == "forward") {
             moveDistance(value, true);
             reply.set_message("Moved " + std::to_string(value) + " cm forward");
-        } else if (cmd == "REVERSE") {
+        } else if (cmd == "reverse") {
             moveDistance(value, false);
             reply.set_message("Moved " + std::to_string(value) + " cm backward");
-        } else if (cmd == "ROT") {
+        } else if (cmd == "rot") {
             rotateAngle(value);
             reply.set_message("Rotated " + std::to_string(value) + " degrees");
-        } else if (cmd == "STOP") {
+        } else if (cmd == "stop") {
             motors_->stop();
             reply.set_message("Stopped");
         } else {
