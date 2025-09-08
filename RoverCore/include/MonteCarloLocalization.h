@@ -61,7 +61,6 @@ public:
             return;
         }
 
-        // Resample particles based on weights
         std::vector<Particle> new_particles;
         new_particles.reserve(particles.size());
         std::vector<float> cumulative_weights;
@@ -80,9 +79,8 @@ public:
             new_particles.push_back(particles[index]);
         }
         particles = std::move(new_particles);
-        // Add random noise to particles
-        std::normal_distribution<float> noise_pos(0.f, 0.5f);      // 5 cm position noise
-        std::normal_distribution<float> noise_heading(0.f, 3.f);   // 2° heading noise
+        std::normal_distribution<float> noise_pos(0.f, 0.05f);      // 5 cm position noise
+        std::normal_distribution<float> noise_heading(0.f, 2.f);   // 2° heading noise
         for (auto& p : particles) {
             p.x += noise_pos(gen);
             p.y += noise_pos(gen);
@@ -91,6 +89,27 @@ public:
 
         // Evaluate particles with lidar data
         EvaluateParticles(lidar);
+    }
+
+    Particle GetOptimalRotation(const std::vector<Lidar>& lidar, Particle particle) {
+        if (lidar.empty()) return particle;
+
+        float best_heading = particle.heading_deg;
+        float best_score = EvalutateParticle(lidar, particle);
+
+        const int angle_step = 1; // degrees
+        for (int i = 0; i < 360; i += angle_step) {
+            Particle test_particle = particle;
+            test_particle.heading_deg = WrapAddDeg(particle.heading_deg, i);
+            float score = EvalutateParticle(lidar, test_particle);
+            if (score > best_score) {
+                best_score = score;
+                best_heading = test_particle.heading_deg;
+            }
+        }
+
+        particle.heading_deg = best_heading;
+        return particle;   
     }
 
     void EvaluateParticles(const std::vector<Lidar>& lidar) {
@@ -147,20 +166,16 @@ public:
 
             float s;
             if (meas_hit && pred_hit) {
-                // both hit → sharp Gaussian on difference
                 const float e = std::fabs(meas_m - pred_m);
                 s = std::exp(-(e*e) * inv_2s2);
             } else if (meas_hit != pred_hit) {
-                // one hit, one max-range → softer penalty
                 const float e = std::fabs((meas_hit ? meas_m : pred_m) - Rmax_m);
                 const float sigma_miss_m = 0.20f;
                 s = std::exp(-(e*e) / (2.f * sigma_miss_m * sigma_miss_m));
             } else {
-                // both max-range → agree on free space; give a modest positive score
                 s = 0.25f;
             }
 
-            // keep a small positive floor so sums don't vanish numerically
             if (!(s > 0.f)) s = 0.f;
             s = std::max(p_floor, s);
 
