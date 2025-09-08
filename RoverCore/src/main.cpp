@@ -153,13 +153,10 @@ int main() {
                         p->set_y_m(ray.point_y_m);
                     }
 
-                    {
-                        std::lock_guard<std::mutex> lock(stream_mutex);
-                        if (!lidarWriter->Write(scan)) {
-                            std::fprintf(stderr, "[grpc] lidar stream closed by server\n");
-                            lidarStreamClosed = true;
-                            break;
-                        }
+                    if (!lidarWriter->Write(scan)) {
+                        std::fprintf(stderr, "[grpc] lidar stream closed by server\n");
+                        lidarStreamClosed = true;
+                        break;
                     }
                 }
 
@@ -169,13 +166,10 @@ int main() {
                 gridFrame.set_cell_size_m(GRID_CELL_SIZE_M);
                 gridFrame.set_data(reinterpret_cast<const char*>(grid.data()), grid.size());
 
-                {
-                    std::lock_guard<std::mutex> lock(stream_mutex);
-                    if (!gridWriter->Write(gridFrame)) {
-                        std::fprintf(stderr, "[grpc] grid stream closed by server\n");
-                        gridStreamClosed = true;
-                        break;
-                    }
+                if (!gridWriter->Write(gridFrame)) {
+                    std::fprintf(stderr, "[grpc] grid stream closed by server\n");
+                    gridStreamClosed = true;
+                    break;
                 }
 
                 Pose2D pose2D;
@@ -183,13 +177,10 @@ int main() {
                 pose2D.set_y_m(rover_y_m);
                 pose2D.set_rot_deg(rover_rot_deg);
 
-                {
-                    std::lock_guard<std::mutex> lock(stream_mutex);
-                    if (!poseWriter->Write(pose2D)) {
-                        std::fprintf(stderr, "[grpc] pose stream closed by server\n");
-                        poseStreamClosed = true;
-                        break;
-                    }
+                if (!poseWriter->Write(pose2D)) {
+                    std::fprintf(stderr, "[grpc] pose stream closed by server\n");
+                    poseStreamClosed = true;
+                    break;
                 }
 
                 last_push = now;
