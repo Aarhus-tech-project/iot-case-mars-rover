@@ -85,11 +85,6 @@ int main() {
         g_poseCtx = std::make_unique<grpc::ClientContext>();
         g_lidarCtx = std::make_unique<grpc::ClientContext>();
 
-        auto deadline = std::chrono::system_clock::now() + std::chrono::seconds(10);
-        g_gridCtx->set_deadline(deadline);
-        g_poseCtx->set_deadline(deadline);
-        g_lidarCtx->set_deadline(deadline);
-
         Ack gridAck, poseAck, lidarAck;
         auto gridWriter = stub->PublishGrid(g_gridCtx.get(), &gridAck);
         auto poseWriter = stub->PublishPose(g_poseCtx.get(), &poseAck);
@@ -127,7 +122,6 @@ int main() {
             std::fprintf(stderr, "[lidar_thread] started\n");
             while (g_run.load()) {
                 lr.pump(cb, 10);
-                // Optional: add a small sleep here to avoid hogging CPU
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
             std::fprintf(stderr, "[lidar_thread] exiting\n");
