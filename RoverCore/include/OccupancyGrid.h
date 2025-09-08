@@ -92,6 +92,64 @@ public:
         }
     }
 
+    float RayCastOnGrid(float x, float y, float angle_deg, float max_range_m) const noexcept {
+        auto inb = [](int gx, int gy){ return inBounds(gx, gy); };
+
+        // Convert world -> grid
+        auto [gx, gy] = worldToGrid(x, y);
+        if (!inb(gx, gy)) return 0.f;
+
+        // 0° = up, +CW  => math CCW rad:
+        const float rad = (180.0f - angle_deg) * float(M_PI) / 180.0f;
+        float dx = std::cos(rad);
+        float dy = std::sin(rad);
+
+        // If direction is (almost) zero, bail
+        if (std::abs(dx) < 1e-9f && std::abs(dy) < 1e-9f) return max_range_m;
+
+        // DDA setup
+        const float cs = cell_size_m_;
+        const float rx = x / cs;    // ray origin in cell coords (float)
+        const float ry = y / cs;
+        const float rdx = dx;       // direction in "cell lengths per meter" cancels out
+        const float rdy = dy;
+
+        int ix = int(std::floor(rx));
+        int iy = int(std::floor(ry));
+
+        const int stepx = (rdx > 0.f) ? 1 : -1;
+        const int stepy = (rdy > 0.f) ? 1 : -1;
+
+        auto nextBoundary = [](float r, int i, int step){
+            return (step > 0) ? (float(i) + 1.0f - r) : (r - float(i));
+        };
+
+        float tMaxX = (rdx != 0.f) ? nextBoundary(rx, ix, stepx) / std::abs(rdx) : std::numeric_limits<float>::infinity();
+        float tMaxY = (rdy != 0.f) ? nextBoundary(ry, iy, stepy) / std::abs(rdy) : std::numeric_limits<float>::infinity();
+
+        float tDeltaX = (rdx != 0.f) ? (1.f / std::abs(rdx)) : std::numeric_limits<float>::infinity();
+        float tDeltaY = (rdy != 0.f) ? (1.f / std::abs(rdy)) : std::numeric_limits<float>::infinity();
+
+        // If starting cell is occupied, distance ~0
+        if (at(size_t(ix), size_t(iy)) >= 128) return 0.f;
+
+        const float tMax = max_range_m / cs; // max param in "cells"
+
+        float t = 0.f;
+        while (t <= tMax) {
+            if (tMaxX < tMaxY) {
+                ix += stepx; t = tMaxX; tMaxX += tDeltaX;
+            } else {
+                iy += stepy; t = tMaxY; tMaxY += tDeltaY;
+            }
+            if (!inb(ix, iy)) return std::min(max_range_m, t * cs);
+            if (at(size_t(ix), size_t(iy)) >= 128) {
+                return std::min(max_range_m, t * cs);
+            }
+        }
+        return max_range_m;
+    }
+
 private:
     // Saturating ops
     static inline value_type sat_add(value_type v, int add) noexcept {

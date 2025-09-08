@@ -62,7 +62,6 @@ int main() {
     try {
         std::fprintf(stderr, "[main] Starting\n");
         OccupancyGrid<GRID_WIDTH, GRID_HEIGHT> grid(GRID_CELL_SIZE_M);
-        MonteCarloLocalization<GRID_WIDTH, GRID_HEIGHT> mcl(grid);
 
         // grpc setup
         grpc::ChannelArguments args;
@@ -140,13 +139,15 @@ int main() {
         while (g_run.load()) {
             auto now = std::chrono::steady_clock::now();
             if (now - last_push >= std::chrono::milliseconds(1000)) {
-                if (!buffer.empty()) {
-                    if (first) {
-                        first = false;
-                        OrientationEstimate oe = EstimateHeadingFromScan(buffer, 3.0f, 0.30f, 0.02f, 12, LIDAR_MAX_MM);
-                        rover_rot_deg = oe.snapped_up_deg;
-                        std::printf("[slam] lidar points %zu, initial heading %.1f° (used %d segments)\n", buffer.size(), rover_rot_deg, oe.used_segments);
-                    }
+            if (!buffer.empty()) {
+                /* Manhatten orientation estimation
+                if (first) {
+                    first = false;
+                    OrientationEstimate oe = EstimateHeadingFromScan(buffer, 3.0f, 0.30f, 0.02f, 12, LIDAR_MAX_MM);
+                    rover_rot_deg = oe.snapped_up_deg;
+                    std::printf("[slam] lidar points %zu, initial heading %.1f° (used %d segments)\n", buffer.size(), rover_rot_deg, oe.used_segments);
+                }
+                */
 
                     LidarScan scan;
                     for (const Lidar& lidar : buffer) {
@@ -205,6 +206,36 @@ int main() {
         std::fprintf(stderr, "[main] g_run is false, exiting main loop\n");
 
         g_run.store(false);
+
+        MonteCarloLocalization<GRID_WIDTH, GRID_HEIGHT> mcl(grid);
+        mcl.Iterate(buffer);
+        mcl.Iterate(buffer);
+        mcl.Iterate(buffer);
+        mcl.Iterate(buffer);
+        mcl.Iterate(buffer);
+        mcl.Iterate(buffer);
+        mcl.Iterate(buffer);
+        mcl.Iterate(buffer);
+        mcl.Iterate(buffer);
+        mcl.Iterate(buffer);
+        mcl.Iterate(buffer);
+        std::cout << "[mcl] iteration complete with " << buffer.size() << " lidar points\n";
+        for (const Particle& p : mcl.particles) {
+            std::printf("[mcl] particle: x=%.2f y=%.2f heading=%.1f° weight=%.3f\n", p.x, p.y, p.heading_deg, p.weight);
+        }
+        // Print Particle Confidence
+        Particle mean = mcl.GetMeanParticle();
+        std::printf("[mcl] mean particle: x=%.2f y=%.2f heading=%.1f° weight=%.3f\n", mean.x, mean.y, mean.heading_deg, mean.weight);
+
+        // Print best particle
+        Particle best = mcl.GetBestParticle();
+        float bestWeight = mcl.EvalutateParticle(buffer, best);
+        std::printf("[mcl] best w=%.6f  pose=(%.2f,%.2f, %.1f°)\n", bestWeight, best.x, best.y, best.heading_deg);
+
+        // Actual position
+        float fake_actual_evaluation = mcl.EvalutateParticle(buffer, { rover_x_m, rover_y_m, rover_rot_deg, 0.f });
+        std::printf("[mcl] actual pose: (%.2f,%.2f, %.1f°)  w=%.10f\n",
+                    rover_x_m, rover_y_m, rover_rot_deg, fake_actual_evaluation);
 
         // Ensure gRPC calls are cancelled
         if (g_lidarCtx) g_lidarCtx->TryCancel();
