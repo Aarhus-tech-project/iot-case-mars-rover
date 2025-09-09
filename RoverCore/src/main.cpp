@@ -192,38 +192,15 @@ int main() {
 
         g_run.store(false);
 
-        MonteCarloLocalization<GRID_WIDTH, GRID_HEIGHT> mcl(grid);
-        mcl.Iterate(buffer);
-        mcl.Iterate(buffer);
-        mcl.Iterate(buffer);
-        mcl.Iterate(buffer);
-        mcl.Iterate(buffer);
-        mcl.Iterate(buffer);
-        mcl.Iterate(buffer);
-        mcl.Iterate(buffer);
-        mcl.Iterate(buffer);
-        mcl.Iterate(buffer);
-        mcl.Iterate(buffer);
-        mcl.Iterate(buffer);
-        mcl.Iterate(buffer);
-        // Print Particle Confidence
-        Particle mean = mcl.GetMeanParticle();
-        std::printf("[mcl] mean particle: x=%.2f y=%.2f heading=%.1f° weight=%.3f\n", mean.x, mean.y, mean.heading_deg, mean.weight);
+        auto result = TryLocalizeLidar(grid, buffer, std::nullopt);
+        // or: std::nullopt if you truly have no prior
 
-        // Print best particle
-        Particle best = mcl.GetBestParticle();
-        float bestWeight = mcl.EvalutateParticle(buffer, best);
-        std::printf("[mcl] best w=%.6f  pose=(%.2f,%.2f, %.1f°)\n", bestWeight, best.x, best.y, best.heading_deg);
-
-        // Print best paricle with optimal rotation
-        Particle best_rot = mcl.GetOptimalRotation(buffer, best);
-        float bestRotWeight = mcl.EvalutateParticle(buffer, best_rot);
-        std::printf("[mcl] best+rot w=%.6f  pose=(%.2f,%.2f, %.1f°)\n", bestRotWeight, best_rot.x, best_rot.y, best_rot.heading_deg);
-
-        // Actual position
-        float fake_actual_evaluation = mcl.EvalutateParticle(buffer, { rover_x_m, rover_y_m, rover_rot_deg, 0.f });
-        std::printf("[mcl] actual pose: (%.2f,%.2f, %.1f°)  w=%.10f\n",
-                    rover_x_m, rover_y_m, rover_rot_deg, fake_actual_evaluation);
+        if (result) {
+            std::printf("[mcl] FINAL pose=(%.2f,%.2f, %.1f°)  w=%.3f\n",
+                        result->x, result->y, result->heading_deg, result->weight);
+        } else {
+            // tell the rest of your system we need more info (e.g., rotate-in-place scan, odom hint, etc.)
+        }
 
         // Ensure gRPC calls are cancelled
         if (g_lidarCtx) g_lidarCtx->TryCancel();
