@@ -131,7 +131,7 @@ export default function App() {
   // Load grid image
   useEffect(() => {
     if (!grid || !gridSpriteRef.current) return;
-    const url = grid.url.startsWith("http") ? grid.url : `${API_PREFIX}/${grid.url}`;
+    const url = grid.url.startsWith("http") ? grid.url : `${API_PREFIX}${grid.url}`;
     (async () => {
       const tex = await Assets.load(url);
       const sprite = gridSpriteRef.current!;
@@ -192,6 +192,8 @@ export default function App() {
           Status: {status} | CommandHub: {commandHubStatus} | Grid: {grid ? `${grid.width}×${grid.height}` : "—"} |{" "}
           Lidar: {lidar?.points?.length ?? 0}
         </div>
+
+        <img src="http://localhost:5080/grid.png" alt="Grid" />
         <div ref={mountRef} className="canvas-container" />
       </div>
 
