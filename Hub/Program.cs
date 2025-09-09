@@ -23,6 +23,7 @@ app.MapGrpcService<TelemetryService>();
 app.MapGrpcService<CommandLineService>();
 
 app.MapHub<TelemetryHub>("/telemetryHub");
+app.MapHub<CommandHub>("/commandHub");
 
 app.MapGet("/grid.png", (GridState state) =>
 {
