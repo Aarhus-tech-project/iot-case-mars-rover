@@ -117,6 +117,7 @@ int main() {
             last_angle_cdeg = angle_cdeg;
         };
 
+        /*
         // Start Lidar thread
         std::thread lidar_thread([&]() {
             std::fprintf(stderr, "[lidar_thread] started\n");
@@ -126,11 +127,13 @@ int main() {
             }
             std::fprintf(stderr, "[lidar_thread] exiting\n");
         });
+        */
 
         auto last_push = std::chrono::steady_clock::now();
         bool first = true;
 
         while (g_run.load()) {
+            lr.pump(cb, 10);
             auto now = std::chrono::steady_clock::now();
             if (now - last_push >= std::chrono::milliseconds(1000)) {
             if (!buffer.empty()) {
@@ -208,7 +211,7 @@ int main() {
         if (g_poseCtx) g_poseCtx->TryCancel();
 
         std::fprintf(stderr, "[main] Joining lidar thread...\n");
-        lidar_thread.join();
+        //lidar_thread.join();
         std::fprintf(stderr, "[main] Lidar thread joined.\n");
 
         // Shutdown gRPC writers safely
