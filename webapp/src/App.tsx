@@ -16,6 +16,14 @@ const HUB_URL = "http://localhost:5080/telemetryHub";
 const COMMAND_HUB_URL = "http://localhost:5080/commandHub";
 const API_PREFIX = "http://localhost:5080";
 const MAX_LIDAR_POINTS = 5000;
+const HELP_MESSAGE = [
+        "Available commands:",
+        "- clear: Clear terminal",
+        "- help: Show command list",
+        "- forward <cm>",
+        "- reverse <cm>",
+        "- rot <angle>: (-) right, (+) left"
+      ].join("\n");
 
 type CommandEntry = {
   type: "user" | "server";
@@ -29,7 +37,7 @@ export default function App() {
   const [lidar, setLidar] = useState<LidarDto | null>(null);
 
   const [command, setCommand] = useState("");
-  const [history, setHistory] = useState<CommandEntry[]>([]);
+  const [history, setHistory] = useState<CommandEntry[]>(["Welcome to the Mars Rover Terminal! Type 'help' for a list of commands."].map(text => ({ type: "server", text })));
 
   const mountRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<Application | null>(null);
@@ -157,20 +165,44 @@ export default function App() {
 
   // --- Handle command submit ---
   const sendCommand = () => {
-    if (!command.trim()) return;
+    const trimmedCommand = command.trim();
 
-    setHistory((prev) => [...prev, { type: "user", text: command.trim() }]);
+    if (!trimmedCommand) return;
 
+    // Handle special "clear" command
+    if (trimmedCommand.toLowerCase() === "clear") {
+      setHistory([]);
+      setCommand("");
+      return;
+    }
+
+    if (trimmedCommand === "help") {
+      setHistory((prev) => [
+        ...prev,
+        { type: "user", text: command.trim() },
+        { type: "server", text: HELP_MESSAGE }
+      ]);
+
+      setCommand("");
+      return;
+    }
+
+    // Add command to history
+    setHistory((prev) => [...prev, { type: "user", text: trimmedCommand }]);
+
+    // Handle disconnected state
     if (commandHubStatus !== "connected" || !commandConnRef.current) {
       setHistory((prev) => [
         ...prev,
         { type: "server", text: "[error] CommandHub not connected" }
       ]);
+      setCommand("");
       return;
     }
 
+    // Send command to server
     commandConnRef.current
-      .invoke("SendCommand", command.trim())
+      .invoke("SendCommand", trimmedCommand)
       .catch((err) =>
         setHistory((prev) => [
           ...prev,
@@ -181,6 +213,7 @@ export default function App() {
     setCommand("");
   };
 
+
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") sendCommand();
   };
@@ -189,7 +222,7 @@ export default function App() {
     <div className="app">
       <div className="main">
         <div className="status-bar">
-          Status: {status} | CommandHub: {commandHubStatus} | Grid: {grid ? `${grid.width}×${grid.height}` : "—"} |{" "}
+          Hub Status: {status} | CommandHub: {commandHubStatus} | Grid: {grid ? `${grid.width}×${grid.height}` : "—"} |{" "}
           Lidar: {lidar?.points?.length ?? 0}
         </div>
 
@@ -205,7 +238,11 @@ export default function App() {
         <div className="sidebar-content">
           {history.map((entry, i) => (
             <div key={i} className={entry.type}>
-              {entry.text}
+              {entry.text.includes('\n') ? (
+                <pre>{entry.text}</pre>
+              ) : (
+                entry.text
+              )}
             </div>
           ))}
         </div>
@@ -215,7 +252,7 @@ export default function App() {
             placeholder="Enter command..."
             value={command}
             onChange={(e) => setCommand(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyPress}
           />
           <button onClick={sendCommand}>Send</button>
         </div>
