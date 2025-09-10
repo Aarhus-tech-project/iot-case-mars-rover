@@ -1,4 +1,3 @@
-// Lidar.cpp  (Linux build)
 #ifdef __linux__
 
 #include "Lidar.hpp"
@@ -15,7 +14,7 @@
 
 using namespace std;
 
-static inline uint64_t mono_ns() {
+inline uint64_t mono_ns() {
   using namespace std::chrono;
   return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
 }
@@ -25,7 +24,7 @@ LidarReader::LidarReader(std::string port, int baud, int max_range_mm)
 
 LidarReader::~LidarReader() { close(); }
 
-static unsigned long baud_to_term_(int baud) {
+unsigned long baud_to_term_(int baud) {
   switch (baud) {
     case 9600:   return B9600;
     case 19200:  return B19200;

@@ -44,20 +44,18 @@ static void on_sigint(int) {
     if (!sigint_handled.exchange(true)) {
         std::fprintf(stderr, "\n[signal] Caught signal, shutting down gracefully...\n");
         g_run.store(false);
-        if (g_gridCtx) g_gridCtx->TryCancel();
-        if (g_poseCtx) g_poseCtx->TryCancel();
-        if (g_lidarCtx) g_lidarCtx->TryCancel();
+        // if (g_gridCtx) g_gridCtx->TryCancel();
+        // if (g_poseCtx) g_poseCtx->TryCancel();
+        // if (g_lidarCtx) g_lidarCtx->TryCancel();
     } else {
         std::fprintf(stderr, "\n[signal] Signal received again, forcing exit\n");
         std::exit(1);
     }
 }
 
+
 int main() {
     std::mutex stream_mutex;
-    bool lidarStreamClosed = false;
-    bool gridStreamClosed = false;
-    bool poseStreamClosed = false;
 
     try {
         std::fprintf(stderr, "[main] Starting\n");
@@ -130,8 +128,6 @@ int main() {
         */
 
         auto last_push = std::chrono::steady_clock::now();
-        bool first = true;
-
         while (g_run.load()) {
             lr.pump(cb, 10);
             auto now = std::chrono::steady_clock::now();
@@ -158,8 +154,6 @@ int main() {
 
                     if (!lidarWriter->Write(scan)) {
                         std::fprintf(stderr, "[grpc] lidar stream closed by server\n");
-                        lidarStreamClosed = true;
-                        break;
                     }
                 }
 
@@ -171,8 +165,6 @@ int main() {
 
                 if (!gridWriter->Write(gridFrame)) {
                     std::fprintf(stderr, "[grpc] grid stream closed by server\n");
-                    gridStreamClosed = true;
-                    break;
                 }
 
                 Pose2D pose2D;
@@ -182,14 +174,10 @@ int main() {
 
                 if (!poseWriter->Write(pose2D)) {
                     std::fprintf(stderr, "[grpc] pose stream closed by server\n");
-                    poseStreamClosed = true;
-                    break;
                 }
 
                 last_push = now;
             }
-
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         std::fprintf(stderr, "[main] g_run is false, exiting main loop\n");
 
@@ -214,6 +202,7 @@ int main() {
         //lidar_thread.join();
         std::fprintf(stderr, "[main] Lidar thread joined.\n");
 
+        /*
         // Shutdown gRPC writers safely
         {
             std::lock_guard<std::mutex> lock(stream_mutex);
@@ -239,6 +228,7 @@ int main() {
                 std::fprintf(stderr, "[grpc] pose stream finished: %s\n", status.ok() ? "OK" : status.error_message().c_str());
             }
         }
+        */
 
         lr.close();
         cmd.Stop();
