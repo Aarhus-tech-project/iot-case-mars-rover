@@ -11,7 +11,7 @@
 
 #include <grpcpp/grpcpp.h>
 #include "telemetry.grpc.pb.h"
-#include "Motors.h"
+#include "Motors.hpp"
 
 class CommandStreamClient {
 public:

@@ -4,7 +4,7 @@
 #include <vector>
 #include <algorithm>
 
-#include "Lidar.h"
+#include "Lidar.hpp"
 
 struct OrientationEstimate {
     float heading_up_deg;      // dominant grid axis in your frame (0=up, +CW)

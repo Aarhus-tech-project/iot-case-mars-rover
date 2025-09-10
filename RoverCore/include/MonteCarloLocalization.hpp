@@ -8,9 +8,9 @@
 #include <limits>
 #include <optional>
 
-#include "Config.h"
-#include "Lidar.h"
-#include "OccupancyGrid.h"
+#include "Config.hpp"
+#include "Lidar.hpp"
+#include "OccupancyGrid.hpp"
 
 struct Particle {
     float x {0.f};

@@ -1,4 +1,4 @@
-#include "Lidar.h"
+#include "Lidar.hpp"
 
 #include <chrono>
 #include <cstdio>

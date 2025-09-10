@@ -4,7 +4,7 @@
 #include <cmath>
 #include <utility>
 #include <type_traits>
-#include "Ray.h"
+#include "Ray.hpp"
 
 template <size_t WIDTH, size_t HEIGHT>
 class OccupancyGrid {

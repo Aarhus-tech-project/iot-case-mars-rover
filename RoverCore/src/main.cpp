@@ -14,14 +14,14 @@
 #include <grpcpp/support/channel_arguments.h>
 #include "telemetry.grpc.pb.h"
 
-#include "Config.h"
-#include "Lidar.h"
-#include "OccupancyGrid.h"
-#include "MonteCarloLocalization.h"
-#include "Ray.h"
-#include "Motors.h"
-#include "CommandStreamClient.h"
-#include "OrientationEstimate.h"
+#include "Config.hpp"
+#include "Lidar.hpp"
+#include "OccupancyGrid.hpp"
+#include "MonteCarloLocalization.hpp"
+#include "Ray.hpp"
+#include "Motors.hpp"
+#include "CommandStreamClient.hpp"
+#include "OrientationEstimate.hpp"
 
 using grpc::Channel;
 using grpc::ClientContext;
