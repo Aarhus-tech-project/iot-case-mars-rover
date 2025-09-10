@@ -1,7 +1,6 @@
 #pragma once
 
 #include <iostream>
-
 #include <grpcpp/grpcpp.h>
 #include "telemetry.grpc.pb.h"
 
