@@ -1,19 +1,25 @@
+// Lidar.cpp
 #include "Lidar.hpp"
 
 #include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <vector>
+#include <array>
+
 #ifdef _WIN32
+// Windows stub uses simulator below
 #else
 #include <poll.h>
 #include <termios.h>
-#endif
 #include <fcntl.h>
 #include <unistd.h>
-#include <utility>
+#endif
 
 using namespace std;
+
+// ===== LidarReader ==========================================================
 
 LidarReader::LidarReader(std::string port, int baud, int max_range_mm)
   : port_(std::move(port)), baud_(baud), max_range_mm_(max_range_mm) {}
@@ -26,42 +32,46 @@ uint64_t LidarReader::mono_ns() {
 }
 
 unsigned long LidarReader::baud_to_term_(int baud) {
-  #ifdef _WIN32
+#ifdef _WIN32
   return 0;
-  #else
+#else
   switch (baud) {
-    case 9600: return B9600;
-    case 19200: return B19200;
-    case 38400: return B38400;
-    case 57600: return B57600;
+    case 9600:   return B9600;
+    case 19200:  return B19200;
+    case 38400:  return B38400;
+    case 57600:  return B57600;
     case 115200: return B115200;
     case 230400: return B230400;
-    default: return B230400;
+    default:     return B230400;
   }
-  #endif
+#endif
 }
 
 bool LidarReader::configure_port_() {
-  #ifdef _WIN32
+#ifdef _WIN32
   return false;
-  #else
+#else
   termios tio{};
   if (tcgetattr(fd_, &tio) != 0) {
     perror("tcgetattr");
     return false;
   }
 
+  // Raw 8N1
   cfmakeraw(&tio);
   cfsetspeed(&tio, baud_to_term_(baud_));
 
-  // 8N1, enable receiver, local mode
   tio.c_cflag |= (CLOCAL | CREAD);
   tio.c_cflag &= ~PARENB;
   tio.c_cflag &= ~CSTOPB;
   tio.c_cflag &= ~CSIZE;
   tio.c_cflag |= CS8;
+  tio.c_cflag &= ~CRTSCTS;    // no HW flow control
 
-  // Nonblocking “packet at a time” via poll(); VMIN/VTIME = 0
+  // No SW flow control
+  tio.c_iflag &= ~(IXON | IXOFF | IXANY);
+
+  // Nonblocking reads; we poll() outside
   tio.c_cc[VMIN]  = 0;
   tio.c_cc[VTIME] = 0;
 
@@ -69,9 +79,11 @@ bool LidarReader::configure_port_() {
     perror("tcsetattr");
     return false;
   }
+
+  // Flush any garbage bytes
   tcflush(fd_, TCIFLUSH);
   return true;
-  #endif
+#endif
 }
 
 bool LidarReader::open() {
@@ -88,7 +100,7 @@ bool LidarReader::open() {
   }
   return true;
 #else
-  // non-Linux (macOS, Windows) -> always "ok" with fake data
+  // non-Linux (macOS, Windows) -> OK; we’ll simulate frames in pump()
   return true;
 #endif
 }
@@ -100,45 +112,71 @@ void LidarReader::close() {
     fd_ = -1;
   }
 #else
-  // nothing to do for fake
+  // nothing to do for the simulator
 #endif
 }
 
+// Helper: checksum (LD06 spec = sum of first 46 bytes equals last byte)
+static inline bool ld06_checksum_ok(const uint8_t* f, size_t len) {
+  if (len != 47) return false;
+  uint8_t sum = 0;
+  for (size_t i = 0; i < 46; ++i) sum += f[i];
+  return sum == f[46];
+}
+
 bool LidarReader::pump(const Callback& on_point, int poll_timeout_ms) {
-  // local parser lambda so both branches use the exact same code
+  // ---- Parser: safe, no dangling pointers ----
   auto parse_frames = [&](const Callback& cb)->bool {
     bool any = false;
-    const size_t FRAME = 46;
+    static constexpr size_t FRAME = 47; // correct LD06 frame size
 
     for (;;) {
-      // find header
+      // 1) find header 0x54, length byte 0x2C
       size_t i = 0;
       bool found = false;
-      for (; i + FRAME <= buf_.size(); ++i) {
+      for (; i + 2 <= buf_.size(); ++i) {
         if (buf_[i] == 0x54 && buf_[i + 1] == 0x2C) { found = true; break; }
       }
       if (!found) {
-        if (buf_.size() > 2048) buf_.erase(buf_.begin(), buf_.end() - 1024);
+        // keep tail small
+        if (buf_.size() > 4096) buf_.erase(buf_.begin(), buf_.end() - 1024);
         break;
       }
-      if (i + FRAME > buf_.size()) break; // incomplete
 
-      const uint8_t* f = &buf_[i];
-      buf_.erase(buf_.begin(), buf_.begin() + (i + FRAME));
+      // 2) if frame not complete yet, keep header and wait for more
+      if (i + FRAME > buf_.size()) {
+        if (i > 0) buf_.erase(buf_.begin(), buf_.begin() + i);
+        break;
+      }
 
-      int sa_cent = (int)f[4]  | ((int)f[5]  << 8); // start angle *100
-      int ea_cent = (int)f[42] | ((int)f[43] << 8); // end angle *100
+      // 3) copy out the frame BEFORE erasing
+      std::array<uint8_t, FRAME> fr{};
+      std::copy(buf_.begin() + i, buf_.begin() + i + FRAME, fr.begin());
+
+      // 4) erase this frame from buffer (including bytes before header)
+      buf_.erase(buf_.begin(), buf_.begin() + i + FRAME);
+
+      // 5) checksum
+      if (!ld06_checksum_ok(fr.data(), FRAME)) {
+        // bad frame; continue scanning
+        continue;
+      }
+
+      // 6) parse fields
+      int sa_cent = int(fr[4])  | (int(fr[5])  << 8); // start angle *100
+      int ea_cent = int(fr[42]) | (int(fr[43]) << 8); // end angle *100
       int span    = ea_cent - sa_cent; if (span < 0) span += 36000;
 
       constexpr int N = 12;
       const int denom = (N > 1) ? (N - 1) : 1;
-      uint64_t t = mono_ns();
+      const uint64_t t = mono_ns();
 
+      // points: 12 × (dist_lo, dist_hi, intensity) at bytes [6..41]
       for (int k = 0; k < N; ++k) {
-        const uint8_t dL = f[6 + k*3 + 0];
-        const uint8_t dH = f[6 + k*3 + 1];
-        const uint8_t I  = f[6 + k*3 + 2];
-        uint32_t dmm = ((uint32_t)dH << 8) | (uint32_t)dL;
+        const uint8_t dL = fr[6 + k*3 + 0];
+        const uint8_t dH = fr[6 + k*3 + 1];
+        const uint8_t I  = fr[6 + k*3 + 2];
+        uint32_t dmm = (uint32_t(dH) << 8) | uint32_t(dL);
 
         if (dmm == 0 || dmm > (uint32_t)max_range_mm_) continue;
         uint32_t a_cdeg = (uint32_t)(sa_cent + (span * k) / denom) % 36000;
@@ -154,26 +192,28 @@ bool LidarReader::pump(const Callback& on_point, int poll_timeout_ms) {
   if (fd_ < 0) return false;
 
   // 1) gather bytes (nonblocking wait)
-  bool any = false;
   pollfd pfd{fd_, POLLIN, 0};
   int pr = ::poll(&pfd, 1, poll_timeout_ms);
   if (pr > 0 && (pfd.revents & POLLIN)) {
-    uint8_t tmp[512];
-    ssize_t r = ::read(fd_, tmp, sizeof(tmp));
-    if (r > 0) buf_.insert(buf_.end(), tmp, tmp + r);
+    // read all available chunks
+    for (;;) {
+      uint8_t tmp[512];
+      ssize_t r = ::read(fd_, tmp, sizeof(tmp));
+      if (r > 0) {
+        buf_.insert(buf_.end(), tmp, tmp + r);
+        if (r < (ssize_t)sizeof(tmp)) break; // drained for now
+      } else {
+        break; // EAGAIN or error
+      }
+    }
   }
 
-  // 2) parse frames from buf_ (same code as non-Linux)
-  any = parse_frames(on_point);
-  return any;
+  // 2) parse frames
+  return parse_frames(on_point);
 #else
-  // ---- Full 360° simulation (macOS/Windows) ----
-  // Emit one complete revolution per call. No serial, no frames, no polling.
-  // Keeps your main code unchanged: it still receives points via `on_point(...)`.
-
+  // ---- Cross-platform simulator (macOS/Windows): emit one full revolution ----
   (void)poll_timeout_ms;
 
-  // Ensure M_PI exists on MSVC
   #ifndef M_PI
   #define M_PI 3.14159265358979323846
   #endif
@@ -182,12 +222,9 @@ bool LidarReader::pump(const Callback& on_point, int poll_timeout_ms) {
   if (t_rev == 0) t_rev = mono_ns();
   else t_rev += 100000000ull; // +100 ms per synthetic revolution
 
-  // Angular resolution of the sim (centi-degrees). 100 = 1.00°
-  static constexpr int STEP_CDEG = 100;
-
+  static constexpr int STEP_CDEG = 100; // 1.00°
   for (int a_cdeg = 0; a_cdeg < 36000; a_cdeg += STEP_CDEG) {
     const double a_deg = a_cdeg / 100.0;
-    // Simple scene: 2 m base + sine ripple (1..3 m)
     double dist_m = 2.0 + std::sin(a_deg * M_PI / 180.0);
     if (dist_m < 0.05) dist_m = 0.05;
 
@@ -195,7 +232,7 @@ bool LidarReader::pump(const Callback& on_point, int poll_timeout_ms) {
     if (dmm > static_cast<uint32_t>(max_range_mm_))
       dmm = static_cast<uint32_t>(max_range_mm_);
 
-    const uint32_t intensity = 150; // arbitrary constant intensity
+    const uint32_t intensity = 150;
     on_point(static_cast<uint32_t>(a_cdeg), dmm, intensity, t_rev);
   }
   return true;
