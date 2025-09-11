@@ -78,7 +78,7 @@ void LidarReader::close() {
 }
 
 // LD06: 47 bytes/frame; last byte = sum of first 46
-static inline bool ld06_checksum_ok(const uint8_t* f) {
+inline bool ld06_checksum_ok(const uint8_t* f) {
   uint8_t s = 0;
   for (int i = 0; i < 46; ++i) s += f[i];
   return s == f[46];

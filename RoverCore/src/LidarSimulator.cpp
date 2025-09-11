@@ -12,7 +12,7 @@
 
 using namespace std;
 
-static inline uint64_t mono_ns_now() {
+inline uint64_t mono_ns_now() {
   using namespace std::chrono;
   return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
 }
@@ -35,14 +35,14 @@ bool LidarReader::open() { return true; }
 void LidarReader::close() {}
 
 // --- LD06 helpers ---
-static inline void wr_le16(uint8_t* p, uint16_t v) {
+inline void wr_le16(uint8_t* p, uint16_t v) {
   p[0] = uint8_t(v & 0xFF);
   p[1] = uint8_t((v >> 8) & 0xFF);
 }
-static inline uint8_t ld06_checksum47(const uint8_t* f) {
+inline uint8_t ld06_checksum47(const uint8_t* f) {
   uint8_t s = 0; for (int i = 0; i < 46; ++i) s += f[i]; return s;
 }
-static inline bool ld06_checksum_ok47(const uint8_t* f) {
+inline bool ld06_checksum_ok47(const uint8_t* f) {
   return ld06_checksum47(f) == f[46];
 }
 
