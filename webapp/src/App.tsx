@@ -35,6 +35,9 @@ export default function App() {
   const [commandHubStatus, setCommandHubStatus] = useState<"disconnected" | "connecting" | "connected" | "error">("disconnected");
   const [grid, setGrid] = useState<GridMetaDto | null>(null);
   const [lidar, setLidar] = useState<LidarDto | null>(null);
+  const [gridUrl, setGridUrl] = useState("");
+  const [gridBust, setGridBust] = useState(0);
+  const prevGridKeyRef = useRef<string | null>(null);
 
   const [command, setCommand] = useState("");
   const [history, setHistory] = useState<CommandEntry[]>(["Welcome to the Mars Rover Terminal! Type 'help' for a list of commands."].map(text => ({ type: "server", text })));
@@ -83,7 +86,10 @@ export default function App() {
       .withAutomaticReconnect()
       .build();
 
-    conn.on("Grid", (dto: GridMetaDto) => setGrid(dto));
+    conn.on("Grid", (dto: GridMetaDto) => {
+      setGrid(dto);
+      setGridBust(b => b + 1);
+    });
     conn.on("Lidar", (dto: any) => {
       const pts: LidarPointDto[] = [];
       for (const p of dto.points ?? []) {
@@ -136,12 +142,19 @@ export default function App() {
     return () => { conn.stop(); };
   }, []);
 
+  function makeGridUrl(dto: GridMetaDto, bust: number): string {
+    const base = dto.url.startsWith("http") ? dto.url : `${API_PREFIX}${dto.url}`;
+    const seq = Number.isFinite(dto.seq) ? dto.seq : 0;
+    // both seq (server version) and bust (message count) → unique per update
+    return `${base}?seq=${seq}&bust=${bust}`;
+  }
+
   // Load grid image
   useEffect(() => {
     if (!grid || !gridSpriteRef.current) return;
-    const url = grid.url.startsWith("http") ? grid.url : `${API_PREFIX}${grid.url}`;
+    setGridUrl(makeGridUrl(grid, gridBust));
     (async () => {
-      const tex = await Assets.load(url);
+      const tex = await Assets.load(gridUrl);
       const sprite = gridSpriteRef.current!;
       sprite.texture = tex;
       sprite.width = grid.width;
@@ -226,7 +239,7 @@ export default function App() {
           Lidar: {lidar?.points?.length ?? 0}
         </div>
 
-        <img src="http://localhost:5080/grid.png" alt="Grid" />
+        <img src={gridUrl} alt="Grid" />
         <div ref={mountRef} className="canvas-container" />
       </div>
 

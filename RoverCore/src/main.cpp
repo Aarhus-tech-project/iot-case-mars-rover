@@ -75,15 +75,14 @@ int main() {
         std::vector<Lidar> buffer;
         std::vector<Lidar> backBuffer;
         uint32_t last_angle_cdeg = 0;
-        auto cb = [&](uint32_t angle_cdeg, uint32_t dist_mm, uint32_t intensity, uint64_t t_ns) {
-            if (angle_cdeg < last_angle_cdeg) {
+        auto cb = [&](Lidar lidar) {
+            if (lidar.angle_cdeg < last_angle_cdeg) {
                 buffer = std::move(backBuffer);
                 backBuffer.clear();
             }
 
-            Lidar lidar = { angle_cdeg, dist_mm, intensity, t_ns };
             backBuffer.push_back(lidar);
-            last_angle_cdeg = angle_cdeg;
+            last_angle_cdeg = lidar.angle_cdeg;
         };
 
         // Start Lidar thread
@@ -112,7 +111,6 @@ int main() {
                     std::printf("[slam] lidar points %zu, initial heading %.1f° (used %d segments)\n", buffer.size(), rover_rot_deg, oe.used_segments);
                 }
                 */
-
                     LidarScan scan;
                     for (const Lidar& lidar : buffer) {
                         Ray ray(rover_x_m, rover_y_m, rover_rot_deg + lidar.angle_cdeg / 100.0f, lidar.distance_mm, lidar.time_ns);

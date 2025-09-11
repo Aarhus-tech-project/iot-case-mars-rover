@@ -16,10 +16,7 @@ struct Lidar
 
 class LidarReader {
 public:
-  using Callback = std::function<void(uint32_t angle_cdeg,
-                                      uint32_t distance_mm,
-                                      uint32_t intensity,
-                                      uint64_t t_ns)>;
+  using Callback = std::function<void(Lidar lidar)>;
 
   explicit LidarReader(std::string port = "/dev/serial0", int baud = 230400, int max_range_mm = 12000);
 
