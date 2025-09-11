@@ -150,12 +150,12 @@ target_link_libraries(rover_core PRIVATE Threads::Threads)
 if(MSVC)
   target_compile_options(rover_core PRIVATE
     /W4 /permissive- /Zc:preprocessor /EHsc
-    $<$<CONFIG:Release>:/O2>
+    $<$<CONFIG:Release>:/O3>
   )
 else()
   target_compile_options(rover_core PRIVATE
     -Wall -Wextra -Wpedantic
-    $<$<CONFIG:Release>:-O2 -pipe>
+    $<$<CONFIG:Release>:-O3 -pipe>
   )
 endif()
 

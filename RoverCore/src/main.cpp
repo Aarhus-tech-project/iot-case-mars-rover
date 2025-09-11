@@ -96,21 +96,18 @@ int main() {
         });
 
         auto last_push = std::chrono::steady_clock::now();
+        bool first = true;
         while (g_run.load()) {
-            //lr.pump(cb, 10);
-            //std::this_thread::sleep_for(std::chrono::milliseconds(1));
-
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
             auto now = std::chrono::steady_clock::now();
             if (now - last_push >= std::chrono::milliseconds(1000)) {
             if (!buffer.empty()) {
-                /* Manhatten orientation estimation
                 if (first) {
                     first = false;
                     OrientationEstimate oe = EstimateHeadingFromScan(buffer, 3.0f, 0.30f, 0.02f, 12, LIDAR_MAX_MM);
                     rover_rot_deg = oe.snapped_up_deg;
                     std::printf("[slam] lidar points %zu, initial heading %.1f° (used %d segments)\n", buffer.size(), rover_rot_deg, oe.used_segments);
                 }
-                */
                     LidarScan scan;
                     for (const Lidar& lidar : buffer) {
                         Ray ray(rover_x_m, rover_y_m, rover_rot_deg + lidar.angle_cdeg / 100.0f, lidar.distance_mm, lidar.time_ns);
@@ -137,8 +134,8 @@ int main() {
             lidar_thread.join();
         }
 
-        auto result = TryLocalizeLidar(grid, buffer, std::nullopt);
-        // or: std::nullopt if you truly have no prior
+        Pose prior = {rover_x_m, rover_y_m, rover_rot_deg, 1.0f};
+        auto result = TryLocalizeLidar(grid, buffer, prior);
 
         if (result) {
             std::printf("[mcl] FINAL pose=(%.2f,%.2f, %.1f°)  w=%.3f\n",
