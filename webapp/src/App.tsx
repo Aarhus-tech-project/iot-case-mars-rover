@@ -239,7 +239,7 @@ export default function App() {
           Lidar: {lidar?.points?.length ?? 0}
         </div>
 
-        <img src={gridUrl} alt="Grid" />
+        <img src={gridUrl} alt="Grid" style={{objectFit: "contain", imageRendering: "pixelated"}}/>
         <div ref={mountRef} className="canvas-container" />
       </div>
 
