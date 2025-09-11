@@ -5,13 +5,13 @@
 #include <sys/ioctl.h>
 #include <linux/i2c-dev.h>
 
-BNO055::BNO055(const char* i2c_dev = "/dev/i2c-1", int addr7 = 0x29) : fd_(-1), addr_(addr7) {
+BNO055::BNO055(const char* i2c_dev, int addr7) : fd_(-1), addr_(addr7) {
     std::snprintf(dev_, sizeof(dev_), "%s", i2c_dev);
 }
 
 BNO055::~BNO055() { close(); }
 
-bool BNO055::begin(bool useExtCrystal = false, Mode mode = MODE_NDOF) {
+bool BNO055::begin(bool useExtCrystal, Mode mode) {
     if (!openBus_()) return false;
 
     // Read chip id (0xA0). Sometimes needs a few tries after power-up.

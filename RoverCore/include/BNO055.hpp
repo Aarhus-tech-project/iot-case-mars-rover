@@ -32,7 +32,7 @@ public:
 
   // ---- lifecycle ----
   BNO055(const char* i2c_dev = "/dev/i2c-1", int addr7 = 0x29);
-  ~BNO055() { close(); }
+  ~BNO055();
 
   bool begin(bool useExtCrystal = false, Mode mode = MODE_NDOF);
 
