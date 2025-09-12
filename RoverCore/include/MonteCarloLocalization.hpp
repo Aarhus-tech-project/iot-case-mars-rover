@@ -39,7 +39,7 @@ public:
     // ---- Tunables (good defaults for a Pi) ----
     int   max_beams_eval      = 192;   // cap beams per particle; stratified coverage
     float sigma_pos_m         = 0.05f; // process noise pos
-    float sigma_heading_deg   = 3.0f;  // process noise heading
+    float sigma_heading_deg   = 10.0f;  // process noise heading
     float p_floor             = 1e-4f; // likelihood floor
     float sigma_hit_m         = 0.10f; // sensor model (hit)
     float sigma_miss_m        = 0.20f; // sensor model (miss)
