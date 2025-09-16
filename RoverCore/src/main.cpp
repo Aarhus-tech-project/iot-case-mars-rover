@@ -47,17 +47,15 @@ int main() {
 
     imuEst.Start();
 
-    while (true)
-    {
-        if (imuEst.velocity_mps != 0.f || imuEst.angular_dps != 0.f) {
-            std::printf("[imu] vel=%.2f m/s, ang=%.2f dps, pos=(%.2f,%.2f,%.1f°)\n",
-                        imuEst.velocity_mps, imuEst.angular_dps,
-                        imuEst.x_m, imuEst.y_m, imuEst.rot_deg);
-            break;
+    while (true) {
+        if (imuEst.velocity_mps != 0.0f || imuEst.angular_dps != 0.0f) {
+            std::printf("[imu] pos=(%.2f,%.2f, %.1f°)  vel=%.2f m/s  ang=%.1f dps\n",
+                        imuEst.x_m, imuEst.y_m, imuEst.rot_deg,
+                        imuEst.velocity_mps, imuEst.angular_dps);
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-    
+
     imuEst.Stop();
 
     try {
