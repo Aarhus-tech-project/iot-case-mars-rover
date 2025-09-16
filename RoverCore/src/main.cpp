@@ -23,6 +23,7 @@
 #include "CommandStreamClient.hpp"
 #include "TelemetryStream.hpp"
 #include "OrientationEstimate.hpp"
+#include "BNO055.hpp"
 #include "IMUPositionEstimation.hpp"
 
 // Signal-safe global control flags and contexts
@@ -41,7 +42,7 @@ static void on_sigint(int) {
 }
 
 int main() {
-    BNO055 imu();
+    BNO055 imu;
     IMUPositionEstimation imuEst(imu);
 
     imuEst.Start();
