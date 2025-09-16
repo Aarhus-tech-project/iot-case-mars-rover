@@ -23,6 +23,7 @@
 #include "CommandStreamClient.hpp"
 #include "TelemetryStream.hpp"
 #include "OrientationEstimate.hpp"
+#include "IMUPositionEstimation.hpp"
 
 // Signal-safe global control flags and contexts
 static std::atomic<bool> g_run{true};
@@ -40,6 +41,24 @@ static void on_sigint(int) {
 }
 
 int main() {
+    BNO055 imu();
+    IMUPositionEstimation imuEst(imu);
+
+    imuEst.Start();
+
+    while (true)
+    {
+        if (imuEst.velocity_mps != 0.f || imuEst.angular_dps != 0.f) {
+            std::printf("[imu] vel=%.2f m/s, ang=%.2f dps, pos=(%.2f,%.2f,%.1f°)\n",
+                        imuEst.velocity_mps, imuEst.angular_dps,
+                        imuEst.x_m, imuEst.y_m, imuEst.rot_deg);
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    
+    imuEst.Stop();
+
     try {
         std::fprintf(stderr, "[main] Starting\n");
         OccupancyGrid<GRID_WIDTH, GRID_HEIGHT> grid(GRID_CELL_SIZE_M);
