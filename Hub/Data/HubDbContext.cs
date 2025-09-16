@@ -7,6 +7,10 @@ namespace Hub.Data
     {
         public DbSet<CommandMessage> CommandMessages { get; set; }
         public DbSet<CommandStatus> CommandStatuses { get; set; }
+        public HubDbContext(DbContextOptions<HubDbContext> options)
+            : base(options)
+        {
+        }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
