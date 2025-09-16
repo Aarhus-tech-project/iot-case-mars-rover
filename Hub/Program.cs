@@ -1,4 +1,6 @@
 using HubServer.Services;
+using Hub.Data;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +16,9 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
      .AllowAnyHeader()
      .AllowAnyMethod()
      .AllowCredentials()));
+
+builder.Services.AddDbContext<HubDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 var app = builder.Build();
 
