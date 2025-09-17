@@ -159,7 +159,8 @@ bool LidarReader::pump(const Callback& on_point, int /*poll_timeout_ms*/) {
         if (dmm == 0 || dmm > (uint32_t)max_range_mm_) continue;
 
         uint32_t a_cdeg = (uint32_t)(sa_cent + (span * k) / denom) % 36000;
-        cb(a_cdeg, dmm, (uint32_t)I, t_ns);
+        Lidar point{ (uint32_t)a_cdeg, (uint32_t)dmm, (uint32_t)I, t_ns };
+        cb(point);
         any = true;
       }
     }
