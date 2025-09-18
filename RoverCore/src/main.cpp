@@ -17,14 +17,11 @@
 #include "Config.hpp"
 #include "Lidar.hpp"
 #include "OccupancyGrid.hpp"
-#include "MonteCarloLocalization.hpp"
 #include "Ray.hpp"
 #include "Motors.hpp"
 #include "CommandStreamClient.hpp"
 #include "TelemetryStream.hpp"
-#include "OrientationEstimate.hpp"
 #include "BNO055.hpp"
-#include "IMUPositionEstimation.hpp"
 
 // Signal-safe global control flags and contexts
 static std::atomic<bool> g_run{true};
@@ -42,18 +39,6 @@ static void on_sigint(int) {
 }
 
 int main() {
-    BNO055 imu;
-    IMUPositionEstimation imuEst(imu);
-
-    imuEst.Start();
-
-    while (true) {
-            std::printf("[imu] pos=(%.2f,%.2f, %.1f°) ang=%.1f dps\n", imuEst.x_m, imuEst.y_m, imuEst.rot_deg, imuEst.angular_dps);
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-
-    imuEst.Stop();
-
     try {
         std::fprintf(stderr, "[main] Starting\n");
         OccupancyGrid<GRID_WIDTH, GRID_HEIGHT> grid(GRID_CELL_SIZE_M);
@@ -86,6 +71,14 @@ int main() {
         }
         std::fprintf(stderr, "[lidar] reading %s @%d (max=%dmm)\n", LIDAR_SERIAL_PORT, LIDAR_SERIAL_BAUD, LIDAR_MAX_MM);
 
+        BNO055 imu("/dev/i2c-1");
+        if (!imu.begin(true, BNO055::MODE_NDOF)) {
+            std::fprintf(stderr, "[imu] failed to initialize BNO055\n");
+            //return 1;
+        } else {
+            std::fprintf(stderr, "[imu] BNO055 initialized\n");
+        }
+
         std::vector<Lidar> buffer;
         std::vector<Lidar> backBuffer;
         uint32_t last_angle_cdeg = 0;
@@ -110,18 +103,12 @@ int main() {
         });
 
         auto last_push = std::chrono::steady_clock::now();
-        bool first = true;
         while (g_run.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             auto now = std::chrono::steady_clock::now();
             if (now - last_push >= std::chrono::milliseconds(1000)) {
             if (!buffer.empty()) {
-                if (first) {
-                    first = false;
-                    OrientationEstimate oe = EstimateHeadingFromScan(buffer, 3.0f, 0.30f, 0.02f, 12, LIDAR_MAX_MM);
-                    rover_rot_deg = oe.snapped_up_deg;
-                    std::printf("[slam] lidar points %zu, initial heading %.1f° (used %d segments)\n", buffer.size(), rover_rot_deg, oe.used_segments);
-                }
+                std::printf("[main] got %zu lidar points\n", buffer.size());
                     LidarScan scan;
                     for (const Lidar& lidar : buffer) {
                         Ray ray(rover_x_m, rover_y_m, rover_rot_deg + lidar.angle_cdeg / 100.0f, lidar.distance_mm, lidar.time_ns);
@@ -135,8 +122,12 @@ int main() {
                     telemetry.SendLidar(scan);
                 }
 
-                telemetry.SendGrid(grid);
-                telemetry.SendPose(rover_x_m, rover_y_m, rover_rot_deg);
+                //telemetry.SendGrid(grid);
+                //telemetry.SendPose(rover_x_m, rover_y_m, rover_rot_deg);
+
+                BNO055::Sample imuSample = imu.readSample();
+
+                telemetry.SendIMU(imuSample);
 
                 last_push = now;
             }
@@ -148,8 +139,9 @@ int main() {
             lidar_thread.join();
         }
 
-        Pose prior = {rover_x_m, rover_y_m, rover_rot_deg, 1.0f};
-        auto result = TryLocalizeLidar(grid, buffer, prior);
+        /*
+        //Pose prior = {rover_x_m, rover_y_m, rover_rot_deg, 1.0f};
+        auto result = TryLocalizeLidar(grid, buffer, std::nullopt);
 
         if (result) {
             std::printf("[mcl] FINAL pose=(%.2f,%.2f, %.1f°)  w=%.3f\n",
@@ -157,6 +149,7 @@ int main() {
         } else {
             // tell the rest of your system we need more info (e.g., rotate-in-place scan, odom hint, etc.)
         }
+        */
 
         lr.close();
         cmd.Stop();

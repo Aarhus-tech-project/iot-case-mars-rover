@@ -234,11 +234,11 @@ public:
         }
 
         for (int k = 0; k < K; ++k) {
-            // Evenly spread indices across full scan
             size_t i = (size_t)((k + 0.5f) * (float(M) / float(K)));
             if (i >= M) i = M - 1;
             const auto& ray = lidar[i];
 
+            // Skip invalid measurement outright
             if (ray.distance_mm <= 0) continue;
 
             float meas_m = ray.distance_mm * 0.001f;
@@ -247,28 +247,38 @@ public:
             const float beam_deg  = ray.angle_cdeg * 0.01f;
             const float world_deg = WrapAddDeg(particle.heading_deg, beam_deg);
 
-            float pred_m = grid.RayCastOnGrid(particle.x, particle.y, world_deg, Rmax_m);
-            if (!(pred_m >= 0.f && std::isfinite(pred_m))) pred_m = Rmax_m;
-            if (pred_m > Rmax_m) pred_m = Rmax_m;
+            // New API: returns RayResult
+            RayResult rr = grid.RayCastOnGrid(particle.x, particle.y, WrapAddDeg(world_deg, LIDAR_MOUNT_YAW_DEG), Rmax_m);
 
-            const bool meas_hit = (meas_m < Rmax_m);
-            const bool pred_hit = (pred_m < Rmax_m);
+            // Define hit/miss using explicit flags
+            constexpr float eps = 1e-4f;
+            const bool meas_hit = (meas_m < Rmax_m - eps);
+
+            // If you consider OOB as "no hit", fold it in here:
+            const bool pred_hit = rr.hit;
+            const bool pred_nohit = (!rr.hit) || rr.out_of_bounds || rr.started_oob;
+
+            // --- Ignore rays where BOTH sides are no-hit ---
+            if (!meas_hit && pred_nohit) continue;
+
+            // Clamp/clean predicted distance for scoring
+            float pred_m = std::isfinite(rr.distance_m) ? rr.distance_m : Rmax_m;
+            if (pred_m > Rmax_m) pred_m = Rmax_m;
 
             float s;
             if (meas_hit && pred_hit) {
                 const float e = std::fabs(meas_m - pred_m);
                 s = std::exp(-(e * e) * inv_2s2_hit);
             } else if (meas_hit != pred_hit) {
+                // one says hit, the other says miss → penalize softly
                 const float e = std::fabs((meas_hit ? meas_m : pred_m) - Rmax_m);
                 s = std::exp(-(e * e) * inv_2s2_miss);
             } else {
+                // both miss but we didn't continue? (shouldn't happen unless you change policy)
                 s = 0.25f;
             }
 
-            // temperature & floor
-            s = std::max(p_floor, s);
-            if (alpha != 1.0f) s = std::pow(s, alpha);
-
+            s = std::max(p_floor, (alpha != 1.0f) ? std::pow(s, alpha) : s);
             sum += double(s);
             ++used;
         }
@@ -370,7 +380,7 @@ private:
     }
 };
 
-static constexpr float ACCEPT_W_THRESHOLD = 0.85f;  // your gate
+static constexpr float ACCEPT_W_THRESHOLD = 0.5f;  // your gate
 static constexpr int   ATTEMPTS_MAX      = 5;       // how many restarts we'll try
 static constexpr int   ITER_PER_CHUNK    = 8;       // iterations between checks
 static constexpr int   CHUNKS_PER_ATTEMPT= 10;      // 8*10 = 80 iters per attempt

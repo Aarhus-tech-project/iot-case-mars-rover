@@ -149,6 +149,91 @@ bool BNO055::readGravity(Vec3& v) {     // m/s^2 gravity vector
     return true;
 }
 
+BNO055::Sample BNO055::readSample() {
+    Sample s{}; // zero-initialize
+
+    // Timestamp first (monotonic)
+    using namespace std::chrono;
+    s.time_ns = (uint64_t)duration_cast<nanoseconds>(
+                    steady_clock::now().time_since_epoch()).count();
+
+    // Quaternion
+    {
+        float w=0, x=0, y=0, z=0;
+        if (readQuaternion(w,x,y,z)) { s.w=w; s.x=x; s.y=y; s.z=z; }
+        else { s.w = s.x = s.y = s.z = std::numeric_limits<float>::quiet_NaN(); }
+    }
+
+    // Acceleration (m/s^2)
+    {
+        Vec3 a{};
+        if (readAccel(a)) { s.ax=a.x; s.ay=a.y; s.az=a.z; }
+        else { s.ax = s.ay = s.az = std::numeric_limits<float>::quiet_NaN(); }
+    }
+
+    // Gyro (dps)
+    {
+        Vec3 g{};
+        if (readGyro(g)) { s.gx=g.x; s.gy=g.y; s.gz=g.z; }
+        else { s.gx = s.gy = s.gz = std::numeric_limits<float>::quiet_NaN(); }
+    }
+
+    // Magnetometer (uT) — 1 LSB = 1/16 uT when UNIT_SEL=0x00
+    {
+        uint8_t raw[6];
+        if (readN_(REG_MAG_DATA_X_LSB, raw, 6)) {
+            auto rd16 = [](const uint8_t* p)->int16_t { return (int16_t)(p[0] | (p[1] << 8)); };
+            constexpr float k = 1.0f / 16.0f;
+            s.mx = rd16(&raw[0]) * k;
+            s.my = rd16(&raw[2]) * k;
+            s.mz = rd16(&raw[4]) * k;
+        } else {
+            s.mx = s.my = s.mz = std::numeric_limits<float>::quiet_NaN();
+        }
+    }
+
+    // Euler (deg) — heading, roll, pitch with 1 LSB = 1/16 deg
+    {
+        Euler e{};
+        if (readEuler(e)) {
+            s.eX = e.heading_deg;  // map as you prefer (heading/roll/pitch)
+            s.eY = e.roll_deg;
+            s.eZ = e.pitch_deg;
+        } else {
+            s.eX = s.eY = s.eZ = std::numeric_limits<float>::quiet_NaN();
+        }
+    }
+
+    // Linear acceleration (m/s^2; gravity removed)
+    {
+        Vec3 v{};
+        if (readLinearAccel(v)) { s.lx=v.x; s.ly=v.y; s.lz=v.z; }
+        else { s.lx = s.ly = s.lz = std::numeric_limits<float>::quiet_NaN(); }
+    }
+
+    // Temperature (°C)
+    {
+        int8_t tC = 0;
+        if (readTempC(tC)) s.tx = (float)tC;
+        else s.tx = std::numeric_limits<float>::quiet_NaN();
+    }
+
+    // Calibration (0..3)
+    {
+        Calib c{};
+        if (readCalib(c)) {
+            s.calib_sys   = (uint8_t)c.sys;
+            s.calib_gyro  = (uint8_t)c.gyro;
+            s.calib_accel = (uint8_t)c.accel;
+            s.calib_mag   = (uint8_t)c.mag;
+        } else {
+            s.calib_sys = s.calib_gyro = s.calib_accel = s.calib_mag = 0u;
+        }
+    }
+
+    return s;
+}
+
 // Optional: soft reset (chip reboots, needs re-begin())
 bool BNO055::reset() {
     if (!setMode(MODE_CONFIG)) return false;

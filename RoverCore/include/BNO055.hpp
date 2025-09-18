@@ -9,6 +9,19 @@
 
 class BNO055 {
 public:
+  struct Sample
+  {
+    float w, x, y, z; // quaternion
+    float ax, ay, az; // acceleration m/s²
+    float gx, gy, gz; // gyro dps
+    float mx, my, mz; // magnetometer uT
+    float eX, eY, eZ; // Euler angles degrees
+    float lx, ly, lz; // linear acceleration m/s²
+    float tx;         // temperature °C
+    uint8_t calib_sys, calib_gyro, calib_accel, calib_mag; // 0..3
+    uint64_t time_ns; // monotonic timestamp
+  };
+  
   // ---- public enums/structs ----
   enum Mode : uint8_t {
     MODE_CONFIG = 0x00,
@@ -56,6 +69,8 @@ public:
   bool readLinearAccel(Vec3& v);
 
   bool readGravity(Vec3& v);
+
+  BNO055::Sample readSample();
 
   // Optional: soft reset (chip reboots, needs re-begin())
   bool reset();

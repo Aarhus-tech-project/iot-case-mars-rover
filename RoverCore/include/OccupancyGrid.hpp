@@ -6,6 +6,14 @@
 #include <type_traits>
 #include "Ray.hpp"
 
+struct RayResult {
+    float distance_m;      // distance traveled (clamped to max_range_m)
+    int   cell_x, cell_y;  // last cell entered (if relevant)
+    bool  hit;             // true if hit an occupied cell
+    bool  out_of_bounds;   // true if left the grid
+    bool  started_oob;     // true if start was outside grid
+};
+
 template <size_t WIDTH, size_t HEIGHT>
 class OccupancyGrid {
 public:
@@ -120,62 +128,105 @@ public:
         }
     }
 
-    float RayCastOnGrid(float x, float y, float angle_deg, float max_range_m) const noexcept {
-        auto inb = [](int gx, int gy){ return inBounds(gx, gy); };
+    RayResult RayCastOnGrid(float x, float y, float angle_deg, float max_range_m) const noexcept {
+        RayResult rr{max_range_m, -1, -1, false, false, false};
 
-        // Convert world -> grid
-        auto [gx, gy] = worldToGrid(x, y);
-        if (!inb(gx, gy)) return 0.f;
+        auto inb = [this](int gx, int gy){ return inBounds(gx, gy); };
 
-        // 0° = up, +CW  => math CCW rad:
-        const float rad = (180.0f - angle_deg) * float(M_PI) / 180.0f;
+        // Early OOB check using your existing integer mapping
+        auto [gx0, gy0] = worldToGrid(x, y);
+        if (!inb(gx0, gy0)) {
+            rr.started_oob = true;
+            rr.distance_m  = 0.f;
+            return rr;
+        }
+
+        // ---- Direction in STANDARD math frame ----
+        const float rad = angle_deg * float(M_PI) / 180.0f;   // <— no 180°-angle flip
         float dx = std::cos(rad);
         float dy = std::sin(rad);
 
-        // If direction is (almost) zero, bail
-        if (std::abs(dx) < 1e-9f && std::abs(dy) < 1e-9f) return max_range_m;
+        if (std::abs(dx) < 1e-9f && std::abs(dy) < 1e-9f) {
+            // No movement → no hit, at max range
+            return rr;
+        }
 
-        // DDA setup
+        // ---- Map world -> continuous grid coordinates ----
         const float cs = cell_size_m_;
-        const float rx = x / cs;    // ray origin in cell coords (float)
-        const float ry = y / cs;
-        const float rdx = dx;       // direction in "cell lengths per meter" cancels out
-        const float rdy = dy;
 
-        int ix = int(std::floor(rx));
-        int iy = int(std::floor(ry));
+        // Continuous world-to-grid in math frame (y up).
+        float gx_f = x / cs;
+        float gy_f = y / cs;
 
-        const int stepx = (rdx > 0.f) ? 1 : -1;
-        const int stepy = (rdy > 0.f) ? 1 : -1;
+        // If your grid rows increase downward (typical image-style),
+        // flip Y exactly once for DDA space.
+        constexpr bool Y_DOWN_IMAGE = true;
+        if constexpr (Y_DOWN_IMAGE) {
+            // H is the grid height (in cells)
+            const int H = int(HEIGHT);
+            gy_f = float(H) - 1.0f - gy_f;   // y_up -> y_down index space
+            dy   = -dy;                      // flip direction to match y-down
+        }
 
+        // Integer starting cell (in grid index space used by at()/inBounds())
+        int ix = int(std::floor(gx_f));
+        int iy = int(std::floor(gy_f));
+
+        // Safety: make sure integer start matches earlier OOB check
+        if (!inb(ix, iy)) {
+            rr.started_oob = true;
+            rr.distance_m  = 0.f;
+            return rr;
+        }
+
+        // If starting cell is occupied → hit at zero
+        if (at(size_t(ix), size_t(iy)) >= 128) {
+            rr.hit = true; rr.distance_m = 0.f; rr.cell_x = ix; rr.cell_y = iy;
+            return rr;
+        }
+
+        // ---- Standard grid DDA ----
         auto nextBoundary = [](float r, int i, int step){
             return (step > 0) ? (float(i) + 1.0f - r) : (r - float(i));
         };
 
-        float tMaxX = (rdx != 0.f) ? nextBoundary(rx, ix, stepx) / std::abs(rdx) : std::numeric_limits<float>::infinity();
-        float tMaxY = (rdy != 0.f) ? nextBoundary(ry, iy, stepy) / std::abs(rdy) : std::numeric_limits<float>::infinity();
+        const int stepx = (dx > 0.f) ? 1 : -1;
+        const int stepy = (dy > 0.f) ? 1 : -1;
 
-        float tDeltaX = (rdx != 0.f) ? (1.f / std::abs(rdx)) : std::numeric_limits<float>::infinity();
-        float tDeltaY = (rdy != 0.f) ? (1.f / std::abs(rdy)) : std::numeric_limits<float>::infinity();
+        const float absdx = std::abs(dx);
+        const float absdy = std::abs(dy);
 
-        // If starting cell is occupied, distance ~0
-        if (at(size_t(ix), size_t(iy)) >= 128) return 0.f;
+        float tMaxX   = (dx != 0.f) ? nextBoundary(gx_f, ix, stepx) / absdx : std::numeric_limits<float>::infinity();
+        float tMaxY   = (dy != 0.f) ? nextBoundary(gy_f, iy, stepy) / absdy : std::numeric_limits<float>::infinity();
+        float tDeltaX = (dx != 0.f) ? (1.f / absdx) : std::numeric_limits<float>::infinity();
+        float tDeltaY = (dy != 0.f) ? (1.f / absdy) : std::numeric_limits<float>::infinity();
 
-        const float tMax = max_range_m / cs; // max param in "cells"
-
+        const float tMaxCells = max_range_m / cs;
         float t = 0.f;
-        while (t <= tMax) {
+
+        while (t <= tMaxCells) {
             if (tMaxX < tMaxY) {
                 ix += stepx; t = tMaxX; tMaxX += tDeltaX;
             } else {
                 iy += stepy; t = tMaxY; tMaxY += tDeltaY;
             }
-            if (!inb(ix, iy)) return std::min(max_range_m, t * cs);
+
+            if (!inb(ix, iy)) {
+                rr.out_of_bounds = true;
+                rr.distance_m = std::min(max_range_m, t * cs);
+                return rr;
+            }
             if (at(size_t(ix), size_t(iy)) >= 128) {
-                return std::min(max_range_m, t * cs);
+                rr.hit = true;
+                rr.distance_m = std::min(max_range_m, t * cs);
+                rr.cell_x = ix; rr.cell_y = iy;
+                return rr;
             }
         }
-        return max_range_m;
+
+        // No hit within max range, stayed in-bounds
+        rr.distance_m = max_range_m; // hit=false, out_of_bounds=false
+        return rr;
     }
 
 private:

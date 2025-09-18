@@ -64,3 +64,40 @@ bool TelemetryStream::SendLidar(const LidarScan& scan)
 
     return true;
 }
+
+bool TelemetryStream::SendIMU(const BNO055::Sample& sample)
+{
+    IMUSample imuSample;
+    imuSample.set_w(sample.w);
+    imuSample.set_x(sample.x);
+    imuSample.set_y(sample.y);
+    imuSample.set_z(sample.z);
+    imuSample.set_ax(sample.ax);
+    imuSample.set_ay(sample.ay);
+    imuSample.set_az(sample.az);
+    imuSample.set_gx(sample.gx);
+    imuSample.set_gy(sample.gy);
+    imuSample.set_gz(sample.gz);
+    imuSample.set_mx(sample.mx);
+    imuSample.set_my(sample.my);
+    imuSample.set_mz(sample.mz);
+    imuSample.set_ex(sample.eX);
+    imuSample.set_ey(sample.eY);
+    imuSample.set_ez(sample.eZ);
+    imuSample.set_lx(sample.lx);
+    imuSample.set_ly(sample.ly);
+    imuSample.set_lz(sample.lz);
+    imuSample.set_tx(sample.tx);
+    imuSample.set_calib_sys(sample.calib_sys);
+    imuSample.set_calib_gyro(sample.calib_gyro);
+    imuSample.set_calib_accel(sample.calib_accel);
+    imuSample.set_calib_mag(sample.calib_mag);
+    imuSample.set_time_ns(sample.time_ns);
+
+    if (!imuWriter->Write(imuSample)) {
+        std::fprintf(stderr, "[grpc] imu stream closed by server\n");
+        return false;
+    }
+
+    return true;
+}

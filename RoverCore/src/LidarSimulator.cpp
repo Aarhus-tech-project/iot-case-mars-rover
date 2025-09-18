@@ -1,4 +1,4 @@
-#ifndef __linux__
+#ifdef __linux__
 
 #include "Lidar.hpp"
 

@@ -54,6 +54,11 @@ bool BNO055::readGravity(Vec3& v) {     // m/s^2 gravity vector
     return true;
 }
 
+BNO055::Sample BNO055::readSample() {
+    BNO055::Sample s{};
+    return s;
+}
+
 // Optional: soft reset (chip reboots, needs re-begin())
 bool BNO055::reset() {
     return true;
