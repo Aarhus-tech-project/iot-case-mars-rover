@@ -7,10 +7,12 @@ TelemetryStream::TelemetryStream(std::shared_ptr<grpc::Channel> channel)
     g_gridCtx = std::make_unique<grpc::ClientContext>();
     g_poseCtx = std::make_unique<grpc::ClientContext>();
     g_lidarCtx = std::make_unique<grpc::ClientContext>();
+    g_imuCtx = std::make_unique<grpc::ClientContext>();
     
     gridWriter = stub->PublishGrid(g_gridCtx.get(), &gridAck);
     poseWriter = stub->PublishPose(g_poseCtx.get(), &poseAck);
     lidarWriter = stub->PublishLidar(g_lidarCtx.get(), &lidarAck);
+    imuWriter = stub->PublishIMU(g_imuCtx.get(), &imuAck);
 }
 
 TelemetryStream::~TelemetryStream()
@@ -18,10 +20,12 @@ TelemetryStream::~TelemetryStream()
     if (gridWriter) gridWriter->WritesDone();
     if (poseWriter) poseWriter->WritesDone();
     if (lidarWriter) lidarWriter->WritesDone();
+    if (imuWriter) imuWriter->WritesDone();
 
     if (g_gridCtx) g_gridCtx->TryCancel();
     if (g_poseCtx) g_poseCtx->TryCancel();
     if (g_lidarCtx) g_lidarCtx->TryCancel();
+    if (g_imuCtx) g_imuCtx->TryCancel();
 }
 
 bool TelemetryStream::SendGrid(const OccupancyGrid<GRID_WIDTH, GRID_HEIGHT>& grid)
