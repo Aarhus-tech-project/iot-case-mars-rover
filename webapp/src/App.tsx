@@ -11,6 +11,18 @@ type GridMetaDto = {
 };
 type LidarPointDto = { xM: number; yM: number };
 type LidarDto = { points: LidarPointDto[]; seq: number };
+type ImuDto = {
+  roverTimeNs: number;
+  quaternionW: number; quaternionX: number; quaternionY: number; quaternionZ: number;
+  accelX: number; accelY: number; accelZ: number;
+  gyroX: number; gyroY: number; gyroZ: number;
+  magX: number; magY: number; magZ: number;
+  heading: number; roll: number; pitch: number;
+  linearAccelX: number; linearAccelY: number; linearAccelZ: number;
+  temperatureC: number;
+  calibSys: number; calibGyro: number; calibAccel: number; calibMag: number;
+};
+
 
 const HUB_URL = "http://localhost:5080/telemetryHub";
 const COMMAND_HUB_URL = "http://localhost:5080/commandHub";
@@ -38,6 +50,7 @@ export default function App() {
   const [gridUrl, setGridUrl] = useState("");
   const [gridBust, setGridBust] = useState(0);
   const prevGridKeyRef = useRef<string | null>(null);
+  const [imu, setImu] = useState<ImuDto | null>(null);
 
   const [command, setCommand] = useState("");
   const [history, setHistory] = useState<CommandEntry[]>(["Welcome to the Mars Rover Terminal! Type 'help' for a list of commands."].map(text => ({ type: "server", text })));
@@ -47,6 +60,7 @@ export default function App() {
   const gridSpriteRef = useRef<Sprite | null>(null);
   const lidarDotsRef = useRef<Graphics | null>(null);
   const commandConnRef = useRef<signalR.HubConnection | null>(null);
+  
 
   // Setup Pixi
   useEffect(() => {
@@ -98,6 +112,10 @@ export default function App() {
         if (Number.isFinite(x) && Number.isFinite(y)) pts.push({ xM: x, yM: y });
       }
       setLidar({ points: pts.slice(-MAX_LIDAR_POINTS), seq: Number(dto.seq) || 0 });
+    });
+
+    conn.on("Imu", (dto: ImuDto) => {
+      setImu(dto);
     });
 
     conn.start().then(() => setStatus("connected")).catch(() => setStatus("error"));
@@ -235,11 +253,27 @@ export default function App() {
     <div className="app">
       <div className="main">
         <div className="status-bar">
-          Hub Status: {status} | CommandHub: {commandHubStatus} | Grid: {grid ? `${grid.width}×${grid.height}` : "—"} |{" "}
-          Lidar: {lidar?.points?.length ?? 0}
+          Hub Status: {status} | CommandHub: {commandHubStatus}
         </div>
 
-        <img src={gridUrl} alt="Grid" style={{objectFit: "contain", imageRendering: "pixelated"}}/>
+        <div className="imu-panel">
+          {imu ? (
+            <pre>
+              Time: {imu.roverTimeNs}
+              {"\n"}Quaternion: [{imu.quaternionW.toFixed(2)}, {imu.quaternionX.toFixed(2)}, {imu.quaternionY.toFixed(2)}, {imu.quaternionZ.toFixed(2)}]
+              {"\n"}Accel: [{imu.accelX.toFixed(2)}, {imu.accelY.toFixed(2)}, {imu.accelZ.toFixed(2)}] m/s²
+              {"\n"}Gyro: [{imu.gyroX.toFixed(2)}, {imu.gyroY.toFixed(2)}, {imu.gyroZ.toFixed(2)}] °/s
+              {"\n"}Mag: [{imu.magX.toFixed(2)}, {imu.magY.toFixed(2)}, {imu.magZ.toFixed(2)}] µT
+              {"\n"}Euler: heading={imu.heading.toFixed(1)}°, roll={imu.roll.toFixed(1)}°, pitch={imu.pitch.toFixed(1)}°
+              {"\n"}Linear Accel: [{imu.linearAccelX.toFixed(2)}, {imu.linearAccelY.toFixed(2)}, {imu.linearAccelZ.toFixed(2)}] m/s²
+              {"\n"}Temperature: {imu.temperatureC.toFixed(1)} °C
+              {"\n"}Calibration: sys={imu.calibSys}, gyro={imu.calibGyro}, accel={imu.calibAccel}, mag={imu.calibMag}
+            </pre>
+          ) : (
+            <div>No IMU data yet</div>
+          )}
+        </div>
+
         <div ref={mountRef} className="canvas-container" />
       </div>
 

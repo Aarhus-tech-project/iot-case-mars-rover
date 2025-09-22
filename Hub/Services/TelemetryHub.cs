@@ -5,6 +5,7 @@ public interface ITelemetryClient
     Task Grid(GridMetaDto dto);
     Task Pose(PoseDto dto);
     Task Lidar(LidarDto dto);
+    Task Imu(ImuDto dto);
 }
 
 public sealed class TelemetryHub : Hub<ITelemetryClient> { }
@@ -13,3 +14,14 @@ public record GridMetaDto(int Width, int Height, float CellSizeM, ulong Seq, ulo
 public record PoseDto(float XM, float YM, float Theta, ulong Seq);
 public record LidarPointDto(float XM, float YM);
 public record LidarDto(IReadOnlyList<LidarPointDto> Points, ulong Seq);
+public record ImuDto(
+    ulong RoverTimeNs,
+    float QuaternionW, float QuaternionX, float QuaternionY, float QuaternionZ,
+    float AccelX, float AccelY, float AccelZ,
+    float GyroX, float GyroY, float GyroZ,
+    float MagX, float MagY, float MagZ,
+    float Heading, float Roll, float Pitch,
+    float LinearAccelX, float LinearAccelY, float LinearAccelZ,
+    float TemperatureC,
+    uint CalibSys, uint CalibGyro, uint CalibAccel, uint CalibMag
+);

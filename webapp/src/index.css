@@ -47,6 +47,17 @@ body, html, #root {
   flex: 1;
 }
 
+.imu-panel {
+  padding: 10px;
+  font-family: monospace;
+  font-size: 35px;
+  background: #111;
+  color: #0f0;
+  border-top: 1px solid #222;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
 .sidebar {
   width: 260px;
   background: #111;

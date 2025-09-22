@@ -7,6 +7,8 @@ namespace Hub.Data
     {
         public DbSet<CommandMessage> CommandMessages { get; set; }
         public DbSet<CommandStatus> CommandStatuses { get; set; }
+        public DbSet<ImuSample> ImuSamples { get; set; }
+
         public HubDbContext(DbContextOptions<HubDbContext> options)
             : base(options)
         {
